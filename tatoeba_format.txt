@@ -1,0 +1,6 @@
+sentences_detailed: Sentence id [tab] Lang [tab] Text [tab] Username [tab] Date added [tab] Date last modified
+links: Sentence id [tab] Translation id
+tags: Sentence id [tab] Tag name
+sentences_with_audio: Sentence id [tab] Username [tab] License [tab] Attribution URL
+user_languages: Lang [tab] Skill level [tab] Username [tab] Details
+
