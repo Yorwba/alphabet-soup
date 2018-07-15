@@ -5,13 +5,22 @@ TATOEBA_FILES := $(addprefix data/tatoeba/,$(TATOEBA_FILENAMES))
 TATOEBA_TARBALLS := $(addsuffix .tar.bz2,$(TATOEBA_FILES))
 TATOEBA_CSVS := $(addsuffix .csv,$(TATOEBA_FILES))
 
+all:
+
+download-tatoeba:
+	wget --timestamping --directory-prefix=data/tatoeba/ \
+		$(subst data/tatoeba/,http://downloads.tatoeba.org/exports/,$(TATOEBA_TARBALLS))
+
 data/tatoeba/%.tar.bz2:
 	wget --directory-prefix=data/tatoeba/ \
 		http://downloads.tatoeba.org/exports/$*.tar.bz2
 
 data/tatoeba/%.csv: data/tatoeba/%.tar.bz2
-	tar --directory=data/tatoeba/ --extract --bzip2 --file=$<
+	tar --directory=data/tatoeba/ --extract --bzip2 --touch --file=$<
 
-download-tatoeba:
-	wget --timestamping --directory-prefix=data/tatoeba/ \
-		$(subst data/tatoeba/,http://downloads.tatoeba.org/exports/,$(TATOEBA_TARBALLS))
+data/tatoeba.sqlite: tatoeba_data.py $(TATOEBA_CSVS)
+	./tatoeba_data.py build-database --database=$@
+
+data/tatoeba_sentences_%.csv: data/tatoeba.sqlite tatoeba_data.py
+	./tatoeba_data.py filter-language --database=$< \
+		--language=$* --minimum-level=5 > $@
