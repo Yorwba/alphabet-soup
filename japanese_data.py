@@ -136,6 +136,18 @@ def read_sentences(filename):
             yield sentence, segmented, pronounced, based, grammared
 
 
+def count_or_create(cursor, table, fields, values, frequency_field='frequency'):
+    insert = f'''
+        INSERT OR IGNORE INTO {table} ({', '.join(fields+(frequency_field,))})
+        VALUES ({', '.join(tuple('?' for f in fields) + ('0',))})
+        '''
+    update = f'''
+        UPDATE {table} SET {frequency_field} = {frequency_field} + 1
+        WHERE {' AND '.join(f + ' = ?' for f in fields)}
+        '''
+    cursor.executemany(insert, values)
+    cursor.executemany(update, values)
+
 
 def build_database(args):
     global conn
@@ -148,16 +160,7 @@ def build_database(args):
             INSERT OR IGNORE INTO sentence (text, pronunciation) VALUES (?,?)
             ''',
             (' '.join(segmented), ' '.join(pronounced)))
-        c.executemany(
-            '''
-            INSERT OR IGNORE INTO base_word (text, disambiguator, frequency) VALUES (?,?,0)
-            ''',
-            based)
-        c.executemany(
-            '''
-            UPDATE base_word SET frequency = frequency + 1
-            WHERE text = ? AND disambiguator = ?
-            ''',
+        count_or_create(c, 'base_word', ('text', 'disambiguator'),
             based)
         c.executemany(
             '''
@@ -169,50 +172,14 @@ def build_database(args):
             AND base_word.disambiguator = ?
             ''',
             [(' '.join(segmented), text, disambiguator) for text, disambiguator in based])
-        c.executemany(
-            '''
-            INSERT OR IGNORE INTO grammar (form, frequency) VALUES (?,0)
-            ''',
+        count_or_create(c, 'grammar', ('form',),
             [(g,) for g in grammared])
-        c.executemany(
-            '''
-            UPDATE grammar SET frequency = frequency + 1
-            WHERE form = ?
-            ''',
-            [(g,) for g in grammared])
-        c.executemany(
-            '''
-            INSERT OR IGNORE INTO writing_component (text, frequency) VALUES (?,0)
-            ''',
+        count_or_create(c, 'writing_component', ('text',),
             sentence)
-        c.executemany(
-            '''
-            UPDATE writing_component SET frequency = frequency + 1
-            WHERE text = ?
-            ''',
-            sentence)
-        c.executemany(
-            '''
-            INSERT OR IGNORE INTO pronunciation (word, pronunciation, frequency) VALUES (?,?,0)
-            ''',
-            zip(segmented, pronounced))
-        c.executemany(
-            '''
-            UPDATE pronunciation SET frequency = frequency + 1
-            WHERE word = ? AND pronunciation = ?
-            ''',
-            zip(segmented, pronounced))
-        c.executemany(
-            '''
-            INSERT OR IGNORE INTO pronunciation_component (text, frequency) VALUES (?,0)
-            ''',
-            ((c,) for p in pronounced for c in p))
-        c.executemany(
-            '''
-            UPDATE pronunciation_component SET frequency = frequency + 1
-            WHERE text = ?
-            ''',
-            ((c,) for p in pronounced for c in p))
+        count_or_create(c, 'pronunciation', ('word', 'pronunciation'),
+            list(zip(segmented, pronounced)))
+        count_or_create(c, 'pronunciation_component', ('text',),
+            [(c,) for p in pronounced for c in p])
     conn.commit()
 
 
