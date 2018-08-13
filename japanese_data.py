@@ -68,7 +68,7 @@ def create_tables():
     c.execute(
         '''
         CREATE TABLE IF NOT EXISTS pronunciation (
-            pronunciation_id integer PRIMARY KEY,
+            id integer PRIMARY KEY,
             word text,
             pronunciation text,
             forward_memory_strength real,
@@ -149,37 +149,54 @@ def count_or_create(cursor, table, fields, values, frequency_field='frequency'):
     cursor.executemany(update, values)
 
 
+def create_links(cursor, table1, table2, fields1, fields2, values1, values2):
+    from itertools import product
+    cursor.executemany(
+        f'''
+        INSERT INTO {table1}_{table2}
+        SELECT {table1}.id AS {table1}_id, {table2}.id AS {table2}_id
+        FROM {table1}, {table2}
+        WHERE {' AND '.join(f'{t}.{f} = ?'
+                            for (t, fs) in ((table1, fields1),
+                                            (table2, fields2))
+                            for f in fs)}
+        ''',
+        (v1 + v2 for v1, v2 in product(values1, values2)))
+
+
 def build_database(args):
     global conn
     conn = sqlite3.connect(args.database)
     create_tables()
     c = conn.cursor()
     for (sentence, segmented, pronounced, based, grammared) in read_sentences(args.sentence_table):
+        joined_segmentation = ' '.join(segmented)
+        joined_pronunciation = ' '.join(pronounced)
         c.execute(
             '''
             INSERT OR IGNORE INTO sentence (text, pronunciation) VALUES (?,?)
             ''',
-            (' '.join(segmented), ' '.join(pronounced)))
+            (joined_segmentation, joined_pronunciation))
         count_or_create(c, 'base_word', ('text', 'disambiguator'),
-            based)
-        c.executemany(
-            '''
-            INSERT INTO sentence_base_word
-            SELECT sentence.id AS sentence_id, base_word.id AS base_word_id
-            FROM sentence, base_word
-            WHERE sentence.text = ?
-            AND base_word.text = ?
-            AND base_word.disambiguator = ?
-            ''',
-            [(' '.join(segmented), text, disambiguator) for text, disambiguator in based])
+                        based)
+        create_links(c, 'sentence', 'base_word', ('text',), ('text', 'disambiguator'),
+                     [(joined_segmentation,)], based)
         count_or_create(c, 'grammar', ('form',),
-            [(g,) for g in grammared])
+                        [(g,) for g in grammared])
+        create_links(c, 'sentence', 'grammar', ('text',), ('form',),
+                     [(joined_segmentation,)], [(g,) for g in grammared])
         count_or_create(c, 'writing_component', ('text',),
-            sentence)
+                        sentence)
+        create_links(c, 'sentence', 'writing_component', ('text',), ('text',),
+                     [(joined_segmentation,)], [(w,) for w in sentence])
         count_or_create(c, 'pronunciation', ('word', 'pronunciation'),
-            list(zip(segmented, pronounced)))
+                        list(zip(segmented, pronounced)))
+        create_links(c, 'sentence', 'pronunciation', ('text',), ('word', 'pronunciation'),
+                     [(joined_segmentation,)], list(zip(segmented, pronounced)))
         count_or_create(c, 'pronunciation_component', ('text',),
-            [(c,) for p in pronounced for c in p])
+                        [(c,) for p in pronounced for c in p])
+        create_links(c, 'sentence', 'pronunciation_component', ('text',), ('text',),
+                     [(joined_segmentation,)], [(c,) for p in pronounced for c in p])
     conn.commit()
 
 
