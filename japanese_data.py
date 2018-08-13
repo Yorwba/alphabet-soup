@@ -130,6 +130,8 @@ def read_sentences(filename):
                 disambiguator = category+','+subcategory
                 grammar = conjugation+','+form
                 segmented.append(word)
+                if pronunciation == '*':
+                    pronunciation = word
                 pronounced.append(pronunciation)
                 based.append((base, disambiguator))
                 grammared.append(grammar)
