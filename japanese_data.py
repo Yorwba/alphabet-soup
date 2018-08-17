@@ -188,26 +188,27 @@ def build_database(args):
             INSERT OR IGNORE INTO sentence (text, pronunciation) VALUES (?,?)
             ''',
             (joined_segmentation, joined_pronunciation))
+        sentence_id = [next(c.execute('SELECT last_insert_rowid() FROM sentence'))]
         count_or_create(c, 'base_word', ('text', 'disambiguator'),
                         based)
-        create_links(c, 'sentence', 'base_word', ('text',), ('text', 'disambiguator'),
-                     [(joined_segmentation,)], based)
+        create_links(c, 'sentence', 'base_word', ('id',), ('text', 'disambiguator'),
+                     sentence_id, based)
         count_or_create(c, 'grammar', ('form',),
                         [(g,) for g in grammared])
-        create_links(c, 'sentence', 'grammar', ('text',), ('form',),
-                     [(joined_segmentation,)], [(g,) for g in grammared])
+        create_links(c, 'sentence', 'grammar', ('id',), ('form',),
+                     sentence_id, [(g,) for g in grammared])
         count_or_create(c, 'writing_component', ('text',),
                         sentence)
-        create_links(c, 'sentence', 'writing_component', ('text',), ('text',),
-                     [(joined_segmentation,)], [(w,) for w in sentence])
+        create_links(c, 'sentence', 'writing_component', ('id',), ('text',),
+                     sentence_id, [(w,) for w in sentence])
         count_or_create(c, 'pronunciation', ('word', 'pronunciation'),
                         list(zip(segmented, pronounced)))
-        create_links(c, 'sentence', 'pronunciation', ('text',), ('word', 'pronunciation'),
-                     [(joined_segmentation,)], list(zip(segmented, pronounced)))
+        create_links(c, 'sentence', 'pronunciation', ('id',), ('word', 'pronunciation'),
+                     sentence_id, list(zip(segmented, pronounced)))
         count_or_create(c, 'pronunciation_component', ('text',),
                         [(c,) for p in pronounced for c in p])
-        create_links(c, 'sentence', 'pronunciation_component', ('text',), ('text',),
-                     [(joined_segmentation,)], [(c,) for p in pronounced for c in p])
+        create_links(c, 'sentence', 'pronunciation_component', ('id',), ('text',),
+                     sentence_id, [(c,) for p in pronounced for c in p])
     conn.commit()
 
 
