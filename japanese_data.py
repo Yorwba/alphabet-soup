@@ -110,32 +110,41 @@ def create_tables():
 
 def read_sentences(filename):
     with open(filename) as f:
-        for line in f:
-            line = line[:-1]  # get rid of newline
-            source, sentence_id, sentence = line.split('\t')
-            analyzed = subprocess.run(
+        with subprocess.Popen(
                 ['mecab'],
-                input=sentence.encode('utf-8'),
-                stdout=subprocess.PIPE
-            ).stdout.decode('utf-8')
-            segmented = []
-            pronounced = []
-            based = []
-            grammared = []
-            for row in analyzed.split('\n'):
-                if not row or row == 'EOS':
-                    continue
-                word, analysis = row.split('\t')
-                category, subcategory, conjugation, form, base, pronunciation, details = analysis.split(',')
-                disambiguator = category+','+subcategory
-                grammar = conjugation+','+form
-                segmented.append(word)
-                if pronunciation == '*':
-                    pronunciation = word
-                pronounced.append(pronunciation)
-                based.append((base, disambiguator))
-                grammared.append(grammar)
-            yield sentence, segmented, pronounced, based, grammared
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                bufsize=1,  # line buffered
+                universal_newlines=True
+        ) as mecab:
+            for line in f:
+                line = line.rstrip('\n')
+                source, sentence_id, sentence = line.split('\t')
+                mecab.stdin.write(sentence+'\n')
+                analyzed = ''
+                expected = sentence.replace(' ', '')
+                segmented = []
+                pronounced = []
+                based = []
+                grammared = []
+                while True:
+                    if analyzed == expected:
+                        break
+                    row = mecab.stdout.readline().rstrip('\n')
+                    if not row or row == 'EOS':
+                        continue
+                    word, analysis = row.split('\t')
+                    category, subcategory, conjugation, form, base, pronunciation, details = analysis.split(',')
+                    disambiguator = category+','+subcategory
+                    grammar = conjugation+','+form
+                    analyzed += word
+                    segmented.append(word)
+                    if pronunciation == '*':
+                        pronunciation = word
+                    pronounced.append(pronunciation)
+                    based.append((base, disambiguator))
+                    grammared.append(grammar)
+                yield sentence, segmented, pronounced, based, grammared
 
 
 def count_or_create(cursor, table, fields, values, frequency_field='frequency'):
