@@ -2,6 +2,7 @@
 
 import argparse
 from enum import Enum
+import math
 import sqlite3
 import subprocess
 
@@ -9,6 +10,20 @@ import subprocess
 class ReviewType(Enum):
     WRITING_TO_PRONUNCIATION = 0
     PRONUNCIATION_TO_WRITING = 1
+
+
+def create_link_table(cursor, table1, table2):
+    cursor.execute(
+        f'''
+        CREATE TABLE IF NOT EXISTS {table1}_{table2} (
+            {table1}_id integer REFERENCES {table1}(id),
+            {table2}_id integer REFERENCES {table2}(id))
+        ''')
+    cursor.execute(
+        f'''
+        CREATE INDEX IF NOT EXISTS {table1}_{table2}_idx
+        ON {table1}_{table2} ({table1}_id)
+        ''')
 
 
 def create_tables():
@@ -19,7 +34,8 @@ def create_tables():
             id integer PRIMARY KEY,
             text text UNIQUE,
             meaning text,
-            pronunciation text)
+            pronunciation text,
+            log_probability real)
         ''')
     c.execute(
         '''
@@ -31,12 +47,7 @@ def create_tables():
             frequency real,
             UNIQUE (text, disambiguator))
         ''')
-    c.execute(
-        '''
-        CREATE TABLE IF NOT EXISTS sentence_base_word (
-            sentence_id REFERENCES sentence(id),
-            base_word_id REFERENCES base_word(id))
-        ''')
+    create_link_table(c, 'sentence', 'base_word')
     c.execute(
         '''
         CREATE TABLE IF NOT EXISTS grammar (
@@ -45,12 +56,7 @@ def create_tables():
             memory_strength real,
             frequency real)
         ''')
-    c.execute(
-        '''
-        CREATE TABLE IF NOT EXISTS sentence_grammar (
-            sentence_id REFERENCES sentence(id),
-            grammar_id REFERENCES grammar(id))
-        ''')
+    create_link_table(c, 'sentence', 'grammar')
     c.execute(
         '''
         CREATE TABLE IF NOT EXISTS writing_component (
@@ -59,12 +65,7 @@ def create_tables():
             memory_strength real,
             frequency real)
         ''')
-    c.execute(
-        '''
-        CREATE TABLE IF NOT EXISTS sentence_writing_component (
-            sentence_id REFERENCES sentence(id),
-            writing_component_id REFERENCES writing_component(id))
-        ''')
+    create_link_table(c, 'sentence', 'writing_component')
     c.execute(
         '''
         CREATE TABLE IF NOT EXISTS pronunciation (
@@ -76,12 +77,7 @@ def create_tables():
             frequency real,
             UNIQUE (word, pronunciation))
         ''')
-    c.execute(
-        '''
-        CREATE TABLE IF NOT EXISTS sentence_pronunciation (
-            sentence_id REFERENCES sentence(id),
-            pronunciation_id REFERENCES pronunciation(id))
-        ''')
+    create_link_table(c, 'sentence', 'pronunciation')
     c.execute(
         '''
         CREATE TABLE IF NOT EXISTS pronunciation_component (
@@ -90,12 +86,7 @@ def create_tables():
             memory_strength real,
             frequency real)
         ''')
-    c.execute(
-        '''
-        CREATE TABLE IF NOT EXISTS sentence_pronunciation_component (
-            sentence_id REFERENCES sentence(id),
-            pronunciation_component_id REFERENCES pronunciation_component(id))
-        ''')
+    create_link_table(c, 'sentence', 'pronunciation_component')
     c.execute(
         '''
         CREATE TABLE IF NOT EXISTS review (
@@ -175,9 +166,14 @@ def create_links(cursor, table1, table2, fields1, fields2, values1, values2):
         (v1 + v2 for v1, v2 in product(values1, values2)))
 
 
+def log_total_frequency(cursor, table):
+    return next(cursor.execute(f'SELECT log(sum(frequency)) FROM {table}'))[0]
+
+
 def build_database(args):
     global conn
     conn = sqlite3.connect(args.database)
+    conn.create_function('log', 1, math.log)
     create_tables()
     c = conn.cursor()
     for (sentence, segmented, pronounced, based, grammared) in read_sentences(args.sentence_table):
@@ -209,6 +205,32 @@ def build_database(args):
                         [(c,) for p in pronounced for c in p])
         create_links(c, 'sentence', 'pronunciation_component', ('id',), ('text',),
                      sentence_id, [(c,) for p in pronounced for c in p])
+    log_total_base_words = log_total_frequency(c, 'base_word')
+    log_total_grammars = log_total_frequency(c, 'grammar')
+    log_total_writing_components = log_total_frequency(c, 'writing_component')
+    log_total_pronunciations = log_total_frequency(c, 'pronunciation')
+    log_total_pronunciation_components = log_total_frequency(c, 'pronunciation_component')
+    c.execute(
+        '''
+        UPDATE sentence SET log_probability =
+            (SELECT sum(log(bw.frequency) - ?)
+            FROM sentence_base_word as sbw, base_word as bw
+            WHERE sbw.sentence_id = sentence.id AND sbw.base_word_id = bw.id)
+            + (SELECT sum(log(g.frequency) - ?)
+            FROM sentence_grammar as sg, grammar as g
+            WHERE sg.sentence_id = sentence.id AND sg.grammar_id = g.id)
+            + (SELECT sum(log(wc.frequency) - ?)
+            FROM sentence_writing_component as swc, writing_component as wc
+            WHERE swc.sentence_id = sentence.id AND swc.writing_component_id = wc.id)
+            + (SELECT sum(log(p.frequency) - ?)
+            FROM sentence_pronunciation as sp, pronunciation as p
+            WHERE sp.sentence_id = sentence.id AND sp.pronunciation_id = p.id)
+            + (SELECT sum(log(pc.frequency) - ?)
+            FROM sentence_pronunciation_component as spc, pronunciation_component as pc
+            WHERE spc.sentence_id = sentence.id AND spc.pronunciation_component_id = pc.id)
+        ''',
+        (log_total_base_words, log_total_grammars, log_total_writing_components,
+         log_total_pronunciations, log_total_pronunciation_components))
     conn.commit()
 
 
