@@ -2,6 +2,7 @@
 
 import argparse
 import csv
+import re
 
 
 with open('data/aozora/list_person_all_extended_utf8.csv') as f:
@@ -25,9 +26,33 @@ def modern_works(args):
         print(url)
 
 
+def sentences_in_paragraph(paragraph):
+    left_brackets = '「『（〈'
+    right_brackets = '」』）〉'
+    terminators = '。？！'
+    boundary_pattern = '(['+left_brackets+right_brackets+terminators+'])'
+    parts = re.split(boundary_pattern, paragraph)
+    i = 0
+    sentence = ''
+    while i < len(parts):
+        sentence += parts[i]
+        if i+1 < len(parts):
+            bracket = left_brackets.find(parts[i+1])
+            if bracket >= 0 and i+3 < len(parts) and parts[i+3] == right_brackets[bracket]:
+                sentence += ''.join(parts[i+1:i+4])
+                i += 4
+                continue
+            if parts[i+1] in terminators:
+                sentence += parts[i+1]
+        sentence = sentence.strip()
+        if len(sentence) > 5:  # XXX how to better handle short sentences?
+            yield sentence
+        sentence = ''
+        i += 2
+
+
 def extract_sentences(args):
     import os
-    import re
     import zipfile
     filedir = 'data/aozora/files'
     for filename in os.listdir(filedir):
@@ -49,15 +74,7 @@ def extract_sentences(args):
                             sentence_count = 0
                             for line in text_lines:
                                 line = re.sub('［＃[^］]*］', '', line)
-                                sentences = re.split('(「|。|」|『|』|？|！)', line)
-                                for i in range(0,len(sentences),2):
-                                    sentence = sentences[i]
-                                    if i+1 < len(sentences):
-                                        if sentences[i+1] in ('。', '？', '！'):
-                                            sentence += sentences[i+1]
-                                    sentence = sentence.strip()
-                                    if not sentence:
-                                        continue
+                                for sentence in sentences_in_paragraph(line):
                                     print('\t'.join((
                                         'aozora',
                                         ':'.join((filename, n, str(sentence_count))),
