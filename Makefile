@@ -49,3 +49,6 @@ data/aozora_sentences.csv: aozora_data.py data/aozora/files
 
 data/japanese_sentences.csv: data/tatoeba_sentences_jpn.csv data/aozora_sentences.csv
 	cat $^ > $@
+
+data/japanese_sentences.sqlite: data/japanese_sentences.csv japanese_data.py
+	./japanese_data.py build-database --database=$@ --sentence-table=$<
