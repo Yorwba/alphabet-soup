@@ -2,7 +2,6 @@
 
 import argparse
 from enum import Enum
-import math
 import sqlite3
 import subprocess
 
@@ -35,7 +34,8 @@ def create_tables():
             text text UNIQUE,
             meaning text,
             pronunciation text,
-            log_probability real)
+            unknown_factors real,
+            unknown_percentage real)
         ''')
     c.execute(
         '''
@@ -165,14 +165,13 @@ def create_links(cursor, table1, table2, fields1, fields2, values1, values2):
         (v1 + v2 for v1, v2 in product(values1, values2)))
 
 
-def log_total_frequency(cursor, table):
-    return next(cursor.execute(f'SELECT log(sum(frequency)) FROM {table}'))[0]
+def total_frequency(cursor, table):
+    return next(cursor.execute(f'SELECT sum(frequency) FROM {table}'))[0]
 
 
 def build_database(args):
     global conn
     conn = sqlite3.connect(args.database)
-    conn.create_function('log', 1, math.log)
     create_tables()
     c = conn.cursor()
     for (sentence, segmented, pronounced, based, grammared) in read_sentences(args.sentence_table):
@@ -204,32 +203,25 @@ def build_database(args):
                         [(c,) for p in pronounced for c in p])
         create_links(c, 'sentence', 'pronunciation_component', ('id',), ('text',),
                      sentence_id, [(c,) for p in pronounced for c in p])
-    log_total_base_words = log_total_frequency(c, 'base_word')
-    log_total_grammars = log_total_frequency(c, 'grammar')
-    log_total_writing_components = log_total_frequency(c, 'writing_component')
-    log_total_pronunciations = log_total_frequency(c, 'pronunciation')
-    log_total_pronunciation_components = log_total_frequency(c, 'pronunciation_component')
+    tables = ('base_word', 'grammar', 'writing_component', 'pronunciation', 'pronunciation_component')
     c.execute(
-        '''
-        UPDATE sentence SET log_probability =
-            (SELECT sum(log(bw.frequency) - ?)
-            FROM sentence_base_word as sbw, base_word as bw
-            WHERE sbw.sentence_id = sentence.id AND sbw.base_word_id = bw.id)
-            + (SELECT sum(log(g.frequency) - ?)
-            FROM sentence_grammar as sg, grammar as g
-            WHERE sg.sentence_id = sentence.id AND sg.grammar_id = g.id)
-            + (SELECT sum(log(wc.frequency) - ?)
-            FROM sentence_writing_component as swc, writing_component as wc
-            WHERE swc.sentence_id = sentence.id AND swc.writing_component_id = wc.id)
-            + (SELECT sum(log(p.frequency) - ?)
-            FROM sentence_pronunciation as sp, pronunciation as p
-            WHERE sp.sentence_id = sentence.id AND sp.pronunciation_id = p.id)
-            + (SELECT sum(log(pc.frequency) - ?)
-            FROM sentence_pronunciation_component as spc, pronunciation_component as pc
-            WHERE spc.sentence_id = sentence.id AND spc.pronunciation_component_id = pc.id)
-        ''',
-        (log_total_base_words, log_total_grammars, log_total_writing_components,
-         log_total_pronunciations, log_total_pronunciation_components))
+        f'''
+        UPDATE sentence SET
+            unknown_factors = {'+'.join(
+                f"""(
+                    SELECT count(*)
+                    FROM sentence_{table}, {table}
+                    WHERE sentence_id = sentence.id
+                    AND {table}_id = {table}.id)
+                """ for table in tables)},
+            unknown_percentage = {'+'.join(
+                f"""(
+                    SELECT sum({table}.frequency)/?
+                    FROM sentence_{table}, {table}
+                    WHERE sentence_id = sentence.id
+                    AND {table}_id = {table}.id)
+                """ for table in tables)}
+        ''', tuple(total_frequency(c, table) for table in tables))
     conn.commit()
 
 
