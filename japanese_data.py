@@ -16,7 +16,8 @@ def create_link_table(cursor, table1, table2):
         f'''
         CREATE TABLE IF NOT EXISTS {table1}_{table2} (
             {table1}_id integer REFERENCES {table1}(id),
-            {table2}_id integer REFERENCES {table2}(id))
+            {table2}_id integer REFERENCES {table2}(id),
+            UNIQUE ({table1}_id, {table2}_id))
         ''')
     cursor.execute(
         f'''
@@ -154,7 +155,7 @@ def create_links(cursor, table1, table2, fields1, fields2, values1, values2):
     from itertools import product
     cursor.executemany(
         f'''
-        INSERT INTO {table1}_{table2}
+        INSERT OR IGNORE INTO {table1}_{table2}
         SELECT {table1}.id AS {table1}_id, {table2}.id AS {table2}_id
         FROM {table1}, {table2}
         WHERE {' AND '.join(f'{t}.{f} = ?'
