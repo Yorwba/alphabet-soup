@@ -102,31 +102,30 @@ def create_tables():
 def read_sentences(filename):
     with open(filename) as f:
         with subprocess.Popen(
-                ['mecab'],
+                ['java', '-jar', 'kuromoji/target/kuromoji-1.0-jar-with-dependencies.jar'],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 bufsize=1,  # line buffered
                 universal_newlines=True
-        ) as mecab:
+        ) as kuromoji:
             for line in f:
                 line = line.rstrip('\n')
                 source, sentence_id, sentence = line.split('\t')
-                mecab.stdin.write(sentence+'\n')
+                kuromoji.stdin.write(sentence+'\n')
                 analyzed = ''
-                expected = sentence.replace(' ', '')
                 segmented = []
                 pronounced = []
                 based = []
                 grammared = []
                 while True:
-                    if analyzed == expected:
+                    if analyzed == sentence:
                         break
-                    row = mecab.stdout.readline().rstrip('\n')
+                    row = kuromoji.stdout.readline().rstrip('\n')
                     if not row or row == 'EOS':
                         continue
                     word, analysis = row.split('\t')
-                    category, subcategory, conjugation, form, base, pronunciation, details = analysis.split(',')
-                    disambiguator = category+','+subcategory
+                    pos1, pos2, pos3, pos4, conjugation, form, base, pronunciation = analysis.split(',')
+                    disambiguator = ','.join((pos1, pos2, pos3, pos4))
                     grammar = conjugation+','+form
                     analyzed += word
                     segmented.append(word)
