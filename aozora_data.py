@@ -35,6 +35,12 @@ def sentences_in_paragraph(paragraph):
     i = 0
     sentence = ''
     while i < len(parts):
+        if (parts[i].startswith('と') or parts[i].startswith('って'))\
+                and not sentence and i > 0 and parts[i-1] in right_brackets:
+            # After quotations of sentences, there might be an awkward
+            # "...と言います" or similar hanging around. Skip it.
+            i += 2
+            continue
         sentence += parts[i]
         if i+1 < len(parts):
             bracket = left_brackets.find(parts[i+1])
@@ -44,9 +50,9 @@ def sentences_in_paragraph(paragraph):
                 continue
             if parts[i+1] in terminators:
                 sentence += parts[i+1]
-        sentence = sentence.strip()
-        if len(sentence) > 5:  # XXX how to better handle short sentences?
-            yield sentence
+                sentence = sentence.strip()
+                if len(sentence) > 3:  # XXX how to better handle short sentences?
+                    yield sentence
         sentence = ''
         i += 2
 
