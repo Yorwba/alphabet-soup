@@ -177,7 +177,9 @@ def filter_language(args):
             ''',
             (args.language, args.minimum_level)):
         id, lang, text, user, added, modified = row
-        print('\t'.join(('tatoeba', str(id), text)))
+        url = 'https://tatoeba.org/eng/sentences/show/'+str(id)
+        license = 'https://creativecommons.org/licenses/by/2.0/'
+        print('\t'.join(('tatoeba', url, str(id), license, user, text)))
 
 
 def main(argv):

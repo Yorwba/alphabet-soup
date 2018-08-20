@@ -33,7 +33,11 @@ def create_tables():
         CREATE TABLE IF NOT EXISTS sentence (
             id integer PRIMARY KEY,
             text text UNIQUE,
-            meaning text,
+            source_database text,
+            source_url text,
+            source_id text,
+            license_url text,
+            creator text,
             pronunciation text,
             unknown_factors real,
             unknown_percentage real)
@@ -111,7 +115,7 @@ def read_sentences(filename):
         ) as kuromoji:
             for line in f:
                 line = line.rstrip('\n')
-                source, sentence_id, sentence = line.split('\t')
+                source_database, source_url, source_id, license_url, creator, sentence = line.split('\t')
                 kuromoji.stdin.write(sentence+'\n')
                 analyzed = ''
                 segmented = []
@@ -135,7 +139,8 @@ def read_sentences(filename):
                     pronounced.append(pronunciation)
                     based.append((base, disambiguator))
                     grammared.append(grammar)
-                yield sentence, segmented, pronounced, based, grammared
+                yield (source_database, source_url, source_id, license_url, creator,
+                       sentence, segmented, pronounced, based, grammared)
 
 
 def count_or_create(cursor, table, fields, values, frequency_field='frequency'):
@@ -175,14 +180,19 @@ def build_database(args):
     conn = sqlite3.connect(args.database)
     create_tables()
     c = conn.cursor()
-    for (sentence, segmented, pronounced, based, grammared) in read_sentences(args.sentence_table):
+    for (source_database, source_url, source_id, license_url, creator,
+         sentence, segmented, pronounced, based, grammared
+         ) in read_sentences(args.sentence_table):
         joined_segmentation = ' '.join(segmented)
         joined_pronunciation = ' '.join(pronounced)
         c.execute(
             '''
-            INSERT OR IGNORE INTO sentence (text, pronunciation) VALUES (?,?)
+            INSERT OR IGNORE INTO sentence (
+                text, pronunciation, source_database, source_url, source_id,
+                license_url, creator) VALUES (?,?,?,?,?,?,?)
             ''',
-            (joined_segmentation, joined_pronunciation))
+            (joined_segmentation, joined_pronunciation, source_database,
+             source_url, source_id, license_url, creator))
         sentence_id = [next(c.execute('SELECT last_insert_rowid() FROM sentence'))]
         count_or_create(c, 'base_word', ('text', 'disambiguator'),
                         based)
