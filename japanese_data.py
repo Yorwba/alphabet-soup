@@ -127,7 +127,7 @@ def read_sentences(filename):
                     word, analysis = row.split('\t')
                     pos1, pos2, pos3, pos4, conjugation, form, base, pronunciation = analysis.split(',')
                     disambiguator = ','.join((pos1, pos2, pos3, pos4))
-                    grammar = conjugation+','+form
+                    grammar = ','.join((pos1, conjugation, form))
                     analyzed += word
                     segmented.append(word)
                     if pronunciation == '*':
