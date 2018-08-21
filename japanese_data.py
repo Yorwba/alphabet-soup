@@ -184,8 +184,8 @@ def build_database(args):
     for (source_database, source_url, source_id, license_url, creator,
          sentence, segmented, pronounced, based, grammared
          ) in read_sentences(args.sentence_table):
-        joined_segmentation = ' '.join(segmented)
-        joined_pronunciation = ' '.join(pronounced)
+        joined_segmentation = '\t'.join(segmented)
+        joined_pronunciation = '\t'.join(pronounced)
         c.execute(
             '''
             INSERT OR IGNORE INTO sentence (
