@@ -180,6 +180,7 @@ def build_database(args):
     conn = sqlite3.connect(args.database)
     create_tables()
     c = conn.cursor()
+    previous_sentence_id = None
     for (source_database, source_url, source_id, license_url, creator,
          sentence, segmented, pronounced, based, grammared
          ) in read_sentences(args.sentence_table):
@@ -194,6 +195,9 @@ def build_database(args):
             (joined_segmentation, joined_pronunciation, source_database,
              source_url, source_id, license_url, creator))
         sentence_id = [next(c.execute('SELECT last_insert_rowid() FROM sentence'))]
+        if sentence_id == previous_sentence_id:
+            continue
+        previous_sentence_id = sentence_id
         count_or_create(c, 'base_word', ('text', 'disambiguator'),
                         based)
         create_links(c, 'sentence', 'base_word', ('id',), ('text', 'disambiguator'),
