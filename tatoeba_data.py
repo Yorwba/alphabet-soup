@@ -131,7 +131,7 @@ def read_sentences_with_audio():
             id integer PRIMARY KEY REFERENCES sentences_detailed(id),
             user text REFERENCES sentences_detailed(user),
             license text,
-            attrbution text)
+            attribution text)
         ''')
     c.executemany('INSERT OR REPLACE INTO sentences_with_audio VALUES (?,?,?,?)',
                   read_tatoeba_tsv('data/tatoeba/sentences_with_audio.csv'))

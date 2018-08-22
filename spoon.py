@@ -1,7 +1,43 @@
 #!/usr/bin/python3
 
 import argparse
+import os
 import sqlite3
+import subprocess
+
+
+def get_audio(cursor, sentence, source_id):
+    for ext in ('wav', 'mp3'):
+        path = f'data/audio/{sentence}.{ext}'
+        if os.path.isfile(path):
+            return path
+
+    try:
+        (audio_creator, audio_license, audio_attribution) = next(cursor.execute(
+            f'''
+            SELECT user, license, attribution
+            FROM sentences_with_audio
+            WHERE id = ?
+            ''',
+            (source_id,)))
+        audio_url = f'https://audio.tatoeba.org/sentences/jpn/{source_id}.mp3'
+        file_path = f'data/audio/{sentence}.mp3'
+        import urllib
+        urllib.request.urlretrieve(audio_url, file_path)
+        return file_path
+    except StopIteration:  # no audio on Tatoeba
+        pass
+
+    file_path = f'data/audio/{sentence}.wav'
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    subprocess.run(
+        ['open_jtalk',
+         '-x', '/var/lib/mecab/dic/open-jtalk/naist-jdic/',
+         '-m', '/usr/share/hts-voice/nitech-jp-atr503-m001/nitech_jp_atr503_m001.htsvoice',
+         '-ow', file_path],
+        input=sentence.encode('utf-8'),
+        check=True)
+    return file_path
 
 
 def recommend_sentence(args):
@@ -31,6 +67,7 @@ def recommend_sentence(args):
     print(text)
     print(pronunciation)
     print(translation)
+    subprocess.run(['paplay', get_audio(tc, text.replace('\t',''), source_id)])
 
 
 def main(argv):
