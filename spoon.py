@@ -13,17 +13,19 @@ def get_audio(cursor, sentence, source_id):
             return path
 
     try:
-        (audio_creator, audio_license, audio_attribution) = next(cursor.execute(
+        (creator, license, attribution) = next(cursor.execute(
             f'''
             SELECT user, license, attribution
             FROM sentences_with_audio
             WHERE id = ?
             ''',
             (source_id,)))
-        audio_url = f'https://audio.tatoeba.org/sentences/jpn/{source_id}.mp3'
+        url = f'https://audio.tatoeba.org/sentences/jpn/{source_id}.mp3'
         file_path = f'data/audio/{sentence}.mp3'
         import urllib
-        urllib.request.urlretrieve(audio_url, file_path)
+        urllib.request.urlretrieve(url, file_path)
+        print(f'Downloaded audio by {creator} ({attribution}), '
+              f'licensed under {license}, from {url}')
         return file_path
     except StopIteration:  # no audio on Tatoeba
         pass
@@ -37,6 +39,7 @@ def get_audio(cursor, sentence, source_id):
          '-ow', file_path],
         input=sentence.encode('utf-8'),
         check=True)
+    print('Generated audio using Open JTalk (http://open-jtalk.sourceforge.net)')
     return file_path
 
 
@@ -67,7 +70,8 @@ def recommend_sentence(args):
     print(text)
     print(pronunciation)
     print(translation)
-    subprocess.run(['paplay', get_audio(tc, text.replace('\t',''), source_id)])
+    subprocess.Popen(['paplay', get_audio(tc, text.replace('\t',''), source_id)])
+    print(f'Example from {source_url} by {creator}, licensed under {license_url}')
 
 
 def main(argv):
