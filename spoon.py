@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 import argparse
 import os
@@ -67,11 +67,40 @@ def recommend_sentence(args):
         AND links.sentence_id = ?
         ''',
         (args.translation_language, source_id)))
-    print(text)
-    print(pronunciation)
-    print(translation)
-    subprocess.Popen(['paplay', get_audio(tc, text.replace('\t',''), source_id)])
-    print(f'Example from {source_url} by {creator}, licensed under {license_url}')
+    audio_file = get_audio(tc, text.replace('\t', ''), source_id)
+
+    import PySide2.QtCore as qc
+    import PySide2.QtGui as qg
+    import PySide2.QtMultimedia as qm
+    import PySide2.QtWidgets as qw
+    app = qw.QApplication()
+    dialog = qw.QDialog()
+    possible_fonts = qg.QFontDatabase().families(qg.QFontDatabase.Japanese)
+    japanese_fonts = [font for font in possible_fonts if 'jp' in font.lower()]
+    font = qg.QFont(japanese_fonts[0])
+    dialog.setFont(font)
+    big_font = qg.QFont(font)
+    big_font.setPointSize(font.pointSize()*1.5)
+    dialog.text = qw.QLabel(text)
+    dialog.text.setFont(big_font)
+    dialog.pronunciation = qw.QLabel(pronunciation)
+    dialog.pronunciation.setFont(big_font)
+    dialog.translation = qw.QLabel(translation)
+    dialog.translation.setFont(big_font)
+    dialog.attribution =  qw.QLabel(
+        f'Example from <a href="{source_url}">{source_url}</a> '
+        f'by {creator}, '
+        f'licensed under <a href="{license_url}">{license_url}</a>')
+    dialog.attribution.setOpenExternalLinks(True)
+    layout = qw.QVBoxLayout()
+    layout.addWidget(dialog.text)
+    layout.addWidget(dialog.pronunciation)
+    layout.addWidget(dialog.translation)
+    layout.addWidget(dialog.attribution)
+    dialog.setLayout(layout)
+    dialog.show()
+    qm.QSound.play(audio_file)
+    app.exec_()
 
 
 def main(argv):
