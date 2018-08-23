@@ -127,23 +127,50 @@ def recommend_sentence(args):
         f'by {creator}, '
         f'licensed under <a href="{license_url}">{license_url}</a>')
     dialog.attribution.setOpenExternalLinks(True)
+    dialog.learn_button = qw.QPushButton('Learn')
+    dialog.learn_button.setDefault(True)
+
     hlayout = qw.QHBoxLayout()
-    for memory_items, template in (
-            (base_words, 'the meaning of %s'),
-            (grammars, 'the form %s'),
-            (writing_components, 'writing %s'),
-            (pronunciations, '%s pronounced as %s'),
-            (pronunciation_components, 'pronouncing %s')):
+    base_word_checkboxes = []
+    grammar_checkboxes = []
+    writing_component_checkboxes = []
+    pronunciation_checkboxes = []
+    pronunciation_component_checkboxes = []
+    for memory_items, checkboxes, template in (
+            (base_words, base_word_checkboxes, 'the meaning of %s'),
+            (grammars, grammar_checkboxes, 'the form %s'),
+            (writing_components, writing_component_checkboxes, 'writing %s'),
+            (pronunciations, pronunciation_checkboxes, '%s pronounced as %s'),
+            (pronunciation_components, pronunciation_component_checkboxes, 'pronouncing %s')):
         vlayout = qw.QVBoxLayout()
         for item in memory_items:
-            vlayout.addWidget(qw.QLabel(template % item[1:]))
+            checkbox = qw.QCheckBox(template % item[1:])
+            checkbox.setCheckState(qc.Qt.CheckState.Checked)
+            checkboxes.append(checkbox)
+            vlayout.addWidget(checkbox)
         hlayout.addLayout(vlayout)
+
+    def learn():
+        for memory_items, checkboxes in (
+                (base_words, base_word_checkboxes),
+                (grammars, grammar_checkboxes),
+                (writing_components, writing_component_checkboxes),
+                (pronunciations, pronunciation_checkboxes),
+                (pronunciation_components, pronunciation_component_checkboxes)):
+            for item, checkbox in zip(memory_items, checkboxes):
+                if checkbox.isChecked():
+                    print(f'Going to learn {item}')
+        dialog.accept()
+
+    dialog.learn_button.clicked.connect(learn)
+
     vlayout = qw.QVBoxLayout()
     vlayout.addWidget(dialog.text)
     vlayout.addWidget(dialog.pronunciation)
     vlayout.addWidget(dialog.translation)
     vlayout.addLayout(hlayout)
     vlayout.addWidget(dialog.attribution)
+    vlayout.addWidget(dialog.learn_button)
     dialog.setLayout(vlayout)
     dialog.show()
     qm.QSound.play(audio_file)
