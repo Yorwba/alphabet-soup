@@ -56,6 +56,41 @@ def recommend_sentence(args):
         ORDER BY payoff_effort_ratio DESC
         LIMIT 1
     '''))
+    base_words = list(c.execute(
+        f'''
+        SELECT base_word.id, base_word.text
+        FROM base_word, sentence_base_word
+        WHERE sentence_id = {id}
+        AND base_word_id = base_word.id
+        '''))
+    grammars = list(c.execute(
+        f'''
+        SELECT grammar.id, grammar.form
+        FROM grammar, sentence_grammar
+        WHERE sentence_id = {id}
+        AND grammar_id = grammar.id
+        '''))
+    writing_components = list(c.execute(
+        f'''
+        SELECT writing_component.id, writing_component.text
+        FROM writing_component, sentence_writing_component
+        WHERE sentence_id = {id}
+        AND writing_component_id = writing_component.id
+        '''))
+    pronunciations = list(c.execute(
+        f'''
+        SELECT pronunciation.id, pronunciation.word, pronunciation.pronunciation
+        FROM pronunciation, sentence_pronunciation
+        WHERE sentence_id = {id}
+        AND pronunciation_id = pronunciation.id
+        '''))
+    pronunciation_components = list(c.execute(
+        f'''
+        SELECT pronunciation_component.id, pronunciation_component.text
+        FROM pronunciation_component, sentence_pronunciation_component
+        WHERE sentence_id = {id}
+        AND pronunciation_component_id = pronunciation_component.id
+        '''))
     tatoeba_conn = sqlite3.connect(args.tatoeba_database)
     tc = tatoeba_conn.cursor()
     (translation,) = next(tc.execute(
@@ -92,12 +127,24 @@ def recommend_sentence(args):
         f'by {creator}, '
         f'licensed under <a href="{license_url}">{license_url}</a>')
     dialog.attribution.setOpenExternalLinks(True)
-    layout = qw.QVBoxLayout()
-    layout.addWidget(dialog.text)
-    layout.addWidget(dialog.pronunciation)
-    layout.addWidget(dialog.translation)
-    layout.addWidget(dialog.attribution)
-    dialog.setLayout(layout)
+    hlayout = qw.QHBoxLayout()
+    for memory_items, template in (
+            (base_words, 'the meaning of %s'),
+            (grammars, 'the form %s'),
+            (writing_components, 'writing %s'),
+            (pronunciations, '%s pronounced as %s'),
+            (pronunciation_components, 'pronouncing %s')):
+        vlayout = qw.QVBoxLayout()
+        for item in memory_items:
+            vlayout.addWidget(qw.QLabel(template % item[1:]))
+        hlayout.addLayout(vlayout)
+    vlayout = qw.QVBoxLayout()
+    vlayout.addWidget(dialog.text)
+    vlayout.addWidget(dialog.pronunciation)
+    vlayout.addWidget(dialog.translation)
+    vlayout.addLayout(hlayout)
+    vlayout.addWidget(dialog.attribution)
+    dialog.setLayout(vlayout)
     dialog.show()
     qm.QSound.play(audio_file)
     app.exec_()
