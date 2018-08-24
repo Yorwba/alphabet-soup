@@ -44,7 +44,7 @@ def create_tables():
         ''')
     c.execute(
         '''
-        CREATE TABLE IF NOT EXISTS base_word (
+        CREATE TABLE IF NOT EXISTS lemma (
             id integer PRIMARY KEY,
             text text,
             disambiguator text,
@@ -52,7 +52,7 @@ def create_tables():
             frequency real,
             UNIQUE (text, disambiguator))
         ''')
-    create_link_table(c, 'sentence', 'base_word')
+    create_link_table(c, 'sentence', 'lemma')
     c.execute(
         '''
         CREATE TABLE IF NOT EXISTS grammar (
@@ -64,13 +64,13 @@ def create_tables():
     create_link_table(c, 'sentence', 'grammar')
     c.execute(
         '''
-        CREATE TABLE IF NOT EXISTS writing_component (
+        CREATE TABLE IF NOT EXISTS grapheme (
             id integer PRIMARY KEY,
             text text UNIQUE,
             memory_strength real,
             frequency real)
         ''')
-    create_link_table(c, 'sentence', 'writing_component')
+    create_link_table(c, 'sentence', 'grapheme')
     c.execute(
         '''
         CREATE TABLE IF NOT EXISTS pronunciation (
@@ -85,13 +85,13 @@ def create_tables():
     create_link_table(c, 'sentence', 'pronunciation')
     c.execute(
         '''
-        CREATE TABLE IF NOT EXISTS pronunciation_component (
+        CREATE TABLE IF NOT EXISTS sound (
             id integer PRIMARY KEY,
             text text UNIQUE,
             memory_strength real,
             frequency real)
         ''')
-    create_link_table(c, 'sentence', 'pronunciation_component')
+    create_link_table(c, 'sentence', 'sound')
     c.execute(
         '''
         CREATE TABLE IF NOT EXISTS review (
@@ -198,27 +198,27 @@ def build_database(args):
         if sentence_id == previous_sentence_id:
             continue
         previous_sentence_id = sentence_id
-        count_or_create(c, 'base_word', ('text', 'disambiguator'),
+        count_or_create(c, 'lemma', ('text', 'disambiguator'),
                         based)
-        create_links(c, 'sentence', 'base_word', ('id',), ('text', 'disambiguator'),
+        create_links(c, 'sentence', 'lemma', ('id',), ('text', 'disambiguator'),
                      sentence_id, based)
         count_or_create(c, 'grammar', ('form',),
                         [(g,) for g in grammared])
         create_links(c, 'sentence', 'grammar', ('id',), ('form',),
                      sentence_id, [(g,) for g in grammared])
-        count_or_create(c, 'writing_component', ('text',),
+        count_or_create(c, 'grapheme', ('text',),
                         sentence)
-        create_links(c, 'sentence', 'writing_component', ('id',), ('text',),
+        create_links(c, 'sentence', 'grapheme', ('id',), ('text',),
                      sentence_id, [(w,) for w in sentence])
         count_or_create(c, 'pronunciation', ('word', 'pronunciation'),
                         list(zip(segmented, pronounced)))
         create_links(c, 'sentence', 'pronunciation', ('id',), ('word', 'pronunciation'),
                      sentence_id, list(zip(segmented, pronounced)))
-        count_or_create(c, 'pronunciation_component', ('text',),
+        count_or_create(c, 'sound', ('text',),
                         [(c,) for p in pronounced for c in p])
-        create_links(c, 'sentence', 'pronunciation_component', ('id',), ('text',),
+        create_links(c, 'sentence', 'sound', ('id',), ('text',),
                      sentence_id, [(c,) for p in pronounced for c in p])
-    tables = ('base_word', 'grammar', 'writing_component', 'pronunciation', 'pronunciation_component')
+    tables = ('lemma', 'grammar', 'grapheme', 'pronunciation', 'sound')
     c.execute(
         f'''
         UPDATE sentence SET

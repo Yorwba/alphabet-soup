@@ -56,12 +56,12 @@ def recommend_sentence(args):
         ORDER BY payoff_effort_ratio DESC
         LIMIT 1
     '''))
-    base_words = list(c.execute(
+    lemmas = list(c.execute(
         f'''
-        SELECT base_word.id, base_word.text
-        FROM base_word, sentence_base_word
+        SELECT lemma.id, lemma.text
+        FROM lemma, sentence_lemma
         WHERE sentence_id = {id}
-        AND base_word_id = base_word.id
+        AND lemma_id = lemma.id
         '''))
     grammars = list(c.execute(
         f'''
@@ -70,12 +70,12 @@ def recommend_sentence(args):
         WHERE sentence_id = {id}
         AND grammar_id = grammar.id
         '''))
-    writing_components = list(c.execute(
+    graphemes = list(c.execute(
         f'''
-        SELECT writing_component.id, writing_component.text
-        FROM writing_component, sentence_writing_component
+        SELECT grapheme.id, grapheme.text
+        FROM grapheme, sentence_grapheme
         WHERE sentence_id = {id}
-        AND writing_component_id = writing_component.id
+        AND grapheme_id = grapheme.id
         '''))
     pronunciations = list(c.execute(
         f'''
@@ -84,12 +84,12 @@ def recommend_sentence(args):
         WHERE sentence_id = {id}
         AND pronunciation_id = pronunciation.id
         '''))
-    pronunciation_components = list(c.execute(
+    sounds = list(c.execute(
         f'''
-        SELECT pronunciation_component.id, pronunciation_component.text
-        FROM pronunciation_component, sentence_pronunciation_component
+        SELECT sound.id, sound.text
+        FROM sound, sentence_sound
         WHERE sentence_id = {id}
-        AND pronunciation_component_id = pronunciation_component.id
+        AND sound_id = sound.id
         '''))
     tatoeba_conn = sqlite3.connect(args.tatoeba_database)
     tc = tatoeba_conn.cursor()
@@ -131,17 +131,17 @@ def recommend_sentence(args):
     dialog.learn_button.setDefault(True)
 
     hlayout = qw.QHBoxLayout()
-    base_word_checkboxes = []
+    lemma_checkboxes = []
     grammar_checkboxes = []
-    writing_component_checkboxes = []
+    grapheme_checkboxes = []
     pronunciation_checkboxes = []
-    pronunciation_component_checkboxes = []
+    sound_checkboxes = []
     for memory_items, checkboxes, template in (
-            (base_words, base_word_checkboxes, 'the meaning of %s'),
+            (lemmas, lemma_checkboxes, 'the meaning of %s'),
             (grammars, grammar_checkboxes, 'the form %s'),
-            (writing_components, writing_component_checkboxes, 'writing %s'),
+            (graphemes, grapheme_checkboxes, 'writing %s'),
             (pronunciations, pronunciation_checkboxes, '%s pronounced as %s'),
-            (pronunciation_components, pronunciation_component_checkboxes, 'pronouncing %s')):
+            (sounds, sound_checkboxes, 'pronouncing %s')):
         vlayout = qw.QVBoxLayout()
         for item in memory_items:
             checkbox = qw.QCheckBox(template % item[1:])
@@ -152,11 +152,11 @@ def recommend_sentence(args):
 
     def learn():
         for memory_items, checkboxes in (
-                (base_words, base_word_checkboxes),
+                (lemmas, lemma_checkboxes),
                 (grammars, grammar_checkboxes),
-                (writing_components, writing_component_checkboxes),
+                (graphemes, grapheme_checkboxes),
                 (pronunciations, pronunciation_checkboxes),
-                (pronunciation_components, pronunciation_component_checkboxes)):
+                (sounds, sound_checkboxes)):
             for item, checkbox in zip(memory_items, checkboxes):
                 if checkbox.isChecked():
                     print(f'Going to learn {item}')
