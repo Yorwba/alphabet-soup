@@ -24,6 +24,11 @@ def create_link_table(cursor, table1, table2):
         CREATE INDEX IF NOT EXISTS {table1}_{table2}_idx
         ON {table1}_{table2} ({table1}_id)
         ''')
+    cursor.execute(
+        f'''
+        CREATE INDEX IF NOT EXISTS {table2}_{table1}_idx
+        ON {table1}_{table2} ({table2}_id)
+        ''')
 
 
 def create_tables():
@@ -49,6 +54,7 @@ def create_tables():
             text text,
             disambiguator text,
             memory_strength real,
+            last_refresh real,
             frequency real,
             UNIQUE (text, disambiguator))
         ''')
@@ -59,6 +65,7 @@ def create_tables():
             id integer PRIMARY KEY,
             form text UNIQUE,
             memory_strength real,
+            last_refresh real,
             frequency real)
         ''')
     create_link_table(c, 'sentence', 'grammar')
@@ -68,6 +75,7 @@ def create_tables():
             id integer PRIMARY KEY,
             text text UNIQUE,
             memory_strength real,
+            last_refresh real,
             frequency real)
         ''')
     create_link_table(c, 'sentence', 'grapheme')
@@ -78,7 +86,9 @@ def create_tables():
             word text,
             pronunciation text,
             forward_memory_strength real,
+            last_forward_refresh real,
             backward_memory_strength real,
+            last_backward_refresh real,
             frequency real,
             UNIQUE (word, pronunciation))
         ''')
@@ -89,9 +99,31 @@ def create_tables():
             id integer PRIMARY KEY,
             text text UNIQUE,
             memory_strength real,
+            last_refresh real,
             frequency real)
         ''')
     create_link_table(c, 'sentence', 'sound')
+    c.execute(
+        '''
+        CREATE TABLE IF NOT EXISTS totals (
+            id integer PRIMARY KEY CHECK (id = 0),
+            total_lemma_frequency real,
+            total_grammar_frequency real,
+            total_grapheme_frequency real,
+            total_pronunciation_frequency real,
+            total_sound_frequency real)
+        ''')
+    c.execute(
+        '''
+        INSERT INTO  totals (
+            id,
+            total_lemma_frequency,
+            total_grammar_frequency,
+            total_grapheme_frequency,
+            total_pronunciation_frequency,
+            total_sound_frequency)
+        VALUES (0, 0, 0, 0, 0, 0)
+        ''')
     c.execute(
         '''
         CREATE TABLE IF NOT EXISTS review (
@@ -100,7 +132,7 @@ def create_tables():
             next_time real,
             desired_log_retention real,
             summed_inverse_memory_strength real,
-            inverse_memory_strength_weighted_previous_time real)
+            inverse_memory_strength_weighted_last_refresh real)
         ''')
 
 
@@ -171,8 +203,35 @@ def create_links(cursor, table1, table2, fields1, fields2, values1, values2):
         (v1 + v2 for v1, v2 in product(values1, values2)))
 
 
-def total_frequency(cursor, table):
-    return next(cursor.execute(f'SELECT sum(frequency) FROM {table}'))[0]
+def update_total_frequency(cursor, table):
+    cursor.execute(
+        f'''
+        UPDATE totals
+        SET total_{table}_frequency = (SELECT sum(frequency) FROM {table})
+        WHERE id = 0
+        ''')
+
+
+def create_refresh_trigger(cursor, table, kinds):
+    for kind in kinds:
+        cursor.execute(
+            f'''
+            CREATE TRIGGER IF NOT EXISTS {table}_{kind}refresh_trigger
+            AFTER UPDATE OF {kind}memory_strength ON {table}
+            FOR EACH ROW WHEN
+                OLD.{kind}memory_strength IS NULL
+                AND NEW.{kind}memory_strength IS NOT NULL
+            BEGIN
+                UPDATE sentence SET
+                    unknown_factors = unknown_factors - 1,
+                    unknown_percentage = unknown_percentage - NEW.frequency/(
+                        SELECT total_{table}_frequency FROM totals)
+                WHERE sentence.id IN (
+                    SELECT sentence_id
+                    FROM sentence_{table}
+                    WHERE {table}_id = NEW.id);
+            END
+            ''')
 
 
 def build_database(args):
@@ -219,6 +278,11 @@ def build_database(args):
         create_links(c, 'sentence', 'sound', ('id',), ('text',),
                      sentence_id, [(c,) for p in pronounced for c in p])
     tables = ('lemma', 'grammar', 'grapheme', 'pronunciation', 'sound')
+    for table in tables:
+        update_total_frequency(c, table)
+    kindses = (('',), ('',), ('',), ('forward_', 'backward_'), ('',))
+    for table, kinds in zip(tables, kindses):
+        create_refresh_trigger(c, table, kinds)
     c.execute(
         f'''
         UPDATE sentence SET
@@ -227,16 +291,18 @@ def build_database(args):
                     SELECT count(*)
                     FROM sentence_{table}, {table}
                     WHERE sentence_id = sentence.id
-                    AND {table}_id = {table}.id)
-                """ for table in tables)},
+                    AND {table}_id = {table}.id
+                    AND {table}.{kind}memory_strength IS NULL)
+                """ for table, kinds in zip(tables, kindses) for kind in kinds)},
             unknown_percentage = {'+'.join(
                 f"""(
-                    SELECT sum({table}.frequency)/?
-                    FROM sentence_{table}, {table}
+                    SELECT sum({table}.frequency)/total_{table}_frequency
+                    FROM sentence_{table}, {table}, totals
                     WHERE sentence_id = sentence.id
-                    AND {table}_id = {table}.id)
-                """ for table in tables)}
-        ''', tuple(total_frequency(c, table) for table in tables))
+                    AND {table}_id = {table}.id
+                    AND {table}.{kind}memory_strength IS NULL)
+                """ for table, kinds in zip(tables, kindses) for kind in kinds)}
+        ''')
     conn.commit()
 
 

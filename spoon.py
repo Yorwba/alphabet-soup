@@ -6,6 +6,22 @@ import sqlite3
 import subprocess
 
 
+def refresh(cursor, table, kinds, ids):
+    cursor.executemany(
+        f'''
+        UPDATE {table} SET
+        {','.join(
+            f"""
+            {kind}memory_strength = IFNULL(
+                {kind}memory_strength + julianday("now") - last_{kind}refresh,
+                25),
+            last_{kind}refresh = julianday("now")
+            """ for kind in kinds)}
+        WHERE id = ?
+        ''',
+        ids)
+
+
 def get_audio(cursor, sentence, source_id):
     for ext in ('wav', 'mp3'):
         path = f'data/audio/{sentence}.{ext}'
@@ -62,6 +78,7 @@ def recommend_sentence(args):
         FROM lemma, sentence_lemma
         WHERE sentence_id = {id}
         AND lemma_id = lemma.id
+        AND memory_strength IS NULL
         '''))
     grammars = list(c.execute(
         f'''
@@ -69,6 +86,7 @@ def recommend_sentence(args):
         FROM grammar, sentence_grammar
         WHERE sentence_id = {id}
         AND grammar_id = grammar.id
+        AND memory_strength IS NULL
         '''))
     graphemes = list(c.execute(
         f'''
@@ -76,6 +94,7 @@ def recommend_sentence(args):
         FROM grapheme, sentence_grapheme
         WHERE sentence_id = {id}
         AND grapheme_id = grapheme.id
+        AND memory_strength IS NULL
         '''))
     pronunciations = list(c.execute(
         f'''
@@ -83,6 +102,7 @@ def recommend_sentence(args):
         FROM pronunciation, sentence_pronunciation
         WHERE sentence_id = {id}
         AND pronunciation_id = pronunciation.id
+        AND (forward_memory_strength IS NULL OR backward_memory_strength IS NULL)
         '''))
     sounds = list(c.execute(
         f'''
@@ -90,6 +110,7 @@ def recommend_sentence(args):
         FROM sound, sentence_sound
         WHERE sentence_id = {id}
         AND sound_id = sound.id
+        AND memory_strength IS NULL
         '''))
     tatoeba_conn = sqlite3.connect(args.tatoeba_database)
     tc = tatoeba_conn.cursor()
@@ -151,15 +172,17 @@ def recommend_sentence(args):
         hlayout.addLayout(vlayout)
 
     def learn():
-        for memory_items, checkboxes in (
-                (lemmas, lemma_checkboxes),
-                (grammars, grammar_checkboxes),
-                (graphemes, grapheme_checkboxes),
-                (pronunciations, pronunciation_checkboxes),
-                (sounds, sound_checkboxes)):
-            for item, checkbox in zip(memory_items, checkboxes):
-                if checkbox.isChecked():
-                    print(f'Going to learn {item}')
+        for table, kinds, memory_items, checkboxes in (
+                ('lemma', ('',), lemmas, lemma_checkboxes),
+                ('grammar', ('',), grammars, grammar_checkboxes),
+                ('grapheme', ('',), graphemes, grapheme_checkboxes),
+                ('pronunciation', ('forward_', 'backward_'), pronunciations, pronunciation_checkboxes),
+                ('sound', ('',), sounds, sound_checkboxes)):
+            refresh(c, table, kinds, [
+                (item[0],)
+                for item, checkbox in zip(memory_items, checkboxes)
+                if checkbox.isChecked()])
+        conn.commit()
         dialog.accept()
 
     dialog.learn_button.clicked.connect(learn)
