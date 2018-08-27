@@ -38,7 +38,7 @@ def get_audio(cursor, sentence, source_id):
             (source_id,)))
         url = f'https://audio.tatoeba.org/sentences/jpn/{source_id}.mp3'
         file_path = f'data/audio/{sentence}.mp3'
-        import urllib
+        import urllib.request
         urllib.request.urlretrieve(url, file_path)
         print(f'Downloaded audio by {creator} ({attribution}), '
               f'licensed under {license}, from {url}')
@@ -196,7 +196,9 @@ def recommend_sentence(args):
     vlayout.addWidget(dialog.learn_button)
     dialog.setLayout(vlayout)
     dialog.show()
-    qm.QSound.play(audio_file)
+    mp = qm.QMediaPlayer()
+    mp.setMedia(qc.QUrl.fromLocalFile(os.path.abspath(audio_file)))
+    mp.play()
     app.exec_()
 
 
