@@ -142,14 +142,17 @@ def recommend_sentence(args):
         vlayout = qw.QVBoxLayout()
         text_label = qw.QLabel(t)
         text_label.setFont(big_font)
+        text_label.setTextInteractionFlags(qc.Qt.TextSelectableByMouse)
         pronunciation_label = qw.QLabel(p)
         pronunciation_label.setFont(big_font)
+        pronunciation_label.setTextInteractionFlags(qc.Qt.TextSelectableByMouse)
         vlayout.addWidget(text_label)
         vlayout.addWidget(pronunciation_label)
         dialog.text_pronunciation_hlayout.addLayout(vlayout)
     dialog.text_pronunciation_hlayout.addStretch()
     dialog.translation = qw.QLabel(translation)
     dialog.translation.setFont(big_font)
+    dialog.translation.setTextInteractionFlags(qc.Qt.TextSelectableByMouse)
     dialog.attribution =  qw.QLabel(
         f'Example from <a href="{source_url}">{source_url}</a> '
         f'by {creator}, '
