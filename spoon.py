@@ -140,19 +140,15 @@ def recommend_sentence(args):
     dialog.setFont(font)
     big_font = qg.QFont(font)
     big_font.setPointSize(font.pointSize()*1.5)
-    dialog.text_pronunciation_hlayout = qw.QHBoxLayout()
-    for t, p in zip(text.split('\t'), pronunciation.split('\t')):
-        vlayout = qw.QVBoxLayout()
-        text_label = qw.QLabel(t)
-        text_label.setFont(big_font)
-        text_label.setTextInteractionFlags(qc.Qt.TextSelectableByMouse)
-        pronunciation_label = qw.QLabel(p)
-        pronunciation_label.setFont(big_font)
-        pronunciation_label.setTextInteractionFlags(qc.Qt.TextSelectableByMouse)
-        vlayout.addWidget(text_label)
-        vlayout.addWidget(pronunciation_label)
-        dialog.text_pronunciation_hlayout.addLayout(vlayout)
-    dialog.text_pronunciation_hlayout.addStretch()
+    rows = (row.split('\t') for row in (text, pronunciation))
+    dialog.text_pronunciation_table = qw.QLabel(
+        f'''<table><tr>{
+            '</tr/><tr>'.join(
+                ''.join(f'<td>{part}</td>' for part in row)
+                for row in rows)
+                }</tr></table>''')
+    dialog.text_pronunciation_table.setFont(big_font)
+    dialog.text_pronunciation_table.setTextInteractionFlags(qc.Qt.TextSelectableByMouse)
     dialog.translation = qw.QLabel(translation)
     dialog.translation.setFont(big_font)
     dialog.translation.setTextInteractionFlags(qc.Qt.TextSelectableByMouse)
@@ -201,7 +197,7 @@ def recommend_sentence(args):
     dialog.learn_button.clicked.connect(learn)
 
     vlayout = qw.QVBoxLayout()
-    vlayout.addLayout(dialog.text_pronunciation_hlayout)
+    vlayout.addWidget(dialog.text_pronunciation_table)
     vlayout.addWidget(dialog.translation)
     vlayout.addLayout(hlayout)
     vlayout.addWidget(dialog.attribution)
