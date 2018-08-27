@@ -114,15 +114,18 @@ def recommend_sentence(args):
         '''))
     tatoeba_conn = sqlite3.connect(args.tatoeba_database)
     tc = tatoeba_conn.cursor()
-    (translation,) = next(tc.execute(
-        f'''
-        SELECT sentences_detailed.text
-        FROM sentences_detailed, links
-        WHERE sentences_detailed.lang = ?
-        AND sentences_detailed.id = links.translation_id
-        AND links.sentence_id = ?
-        ''',
-        (args.translation_language, source_id)))
+    try:
+        (translation,) = next(tc.execute(
+            f'''
+            SELECT sentences_detailed.text
+            FROM sentences_detailed, links
+            WHERE sentences_detailed.lang = ?
+            AND sentences_detailed.id = links.translation_id
+            AND links.sentence_id = ?
+            ''',
+            (args.translation_language, source_id)))
+    except StopIteration:
+        translation = ''
     audio_file = get_audio(tc, text.replace('\t', ''), source_id)
 
     import PySide2.QtCore as qc
