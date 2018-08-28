@@ -52,6 +52,7 @@ def get_audio(cursor, sentence, source_id):
         ['open_jtalk',
          '-x', '/var/lib/mecab/dic/open-jtalk/naist-jdic/',
          '-m', '/usr/share/hts-voice/nitech-jp-atr503-m001/nitech_jp_atr503_m001.htsvoice',
+         '-g', '10',  # volume: 10 dB
          '-ow', file_path],
         input=sentence.encode('utf-8'),
         check=True)
