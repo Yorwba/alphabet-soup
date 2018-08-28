@@ -206,9 +206,12 @@ def recommend_sentence(args):
     vlayout.addWidget(dialog.learn_button)
     dialog.setLayout(vlayout)
     dialog.show()
-    mp = qm.QMediaPlayer()
-    mp.setMedia(qc.QUrl.fromLocalFile(os.path.abspath(audio_file)))
-    mp.play()
+    playlist = qm.QMediaPlaylist()
+    playlist.addMedia(qc.QUrl.fromLocalFile(os.path.abspath(audio_file)))
+    playlist.setPlaybackMode(qm.QMediaPlaylist.Loop)
+    media_player = qm.QMediaPlayer()
+    media_player.setPlaylist(playlist)
+    media_player.play()
     app.exec_()
 
 
