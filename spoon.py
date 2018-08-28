@@ -62,6 +62,7 @@ def get_audio(cursor, sentence, source_id):
 def recommend_sentence(args):
     conn = sqlite3.connect(args.database)
     c = conn.cursor()
+    c.execute('PRAGMA synchronous = off')
     (id, text, source_url, source_id, license_url, creator, pronunciation,
      payoff_effort_ratio) = next(c.execute(
         f'''
