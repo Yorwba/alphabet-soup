@@ -162,13 +162,23 @@ def read_sentences(filename):
                         continue
                     word, analysis = row.split('\t')
                     pos1, pos2, pos3, pos4, conjugation, form, base, pronunciation = analysis.split(',')
-                    disambiguator = ','.join((pos1, pos2, pos3, pos4))
-                    grammar = ','.join((pos1, conjugation, form))
+                    disambiguator = ','.join(
+                        pos for pos in (
+                            pos1 if pos1 not in pos2 else '*',
+                            pos2, pos3, pos4)
+                        if pos != '*')
+                    grammar = ','.join(
+                        part for part in (
+                            pos1 if pos1 not in conjugation else '*',
+                            conjugation, form)
+                        if part != '*')
                     analyzed += word
                     segmented.append(word)
                     if pronunciation == '*':
                         pronunciation = word
                     pronounced.append(pronunciation)
+                    if base == '*':
+                        base = word
                     based.append((base, disambiguator))
                     grammared.append(grammar)
                 yield (source_database, source_url, source_id, license_url, creator,
