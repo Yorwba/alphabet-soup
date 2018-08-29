@@ -76,7 +76,7 @@ def recommend_sentence(args):
     '''))
     lemmas = list(c.execute(
         f'''
-        SELECT lemma.id, lemma.text
+        SELECT lemma.id, lemma.text, lemma.disambiguator
         FROM lemma, sentence_lemma
         WHERE sentence_id = {id}
         AND lemma_id = lemma.id
@@ -169,7 +169,7 @@ def recommend_sentence(args):
     pronunciation_checkboxes = []
     sound_checkboxes = []
     for memory_items, checkboxes, template in (
-            (lemmas, lemma_checkboxes, 'the meaning of %s'),
+            (lemmas, lemma_checkboxes, 'the meaning of %s (%s)'),
             (grammars, grammar_checkboxes, 'the form %s'),
             (graphemes, grapheme_checkboxes, 'writing %s'),
             (pronunciations, pronunciation_checkboxes, '%s pronounced as %s'),
