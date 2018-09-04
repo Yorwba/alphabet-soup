@@ -5,6 +5,11 @@ import os
 import sqlite3
 import subprocess
 
+import PySide2.QtCore as qc
+import PySide2.QtGui as qg
+import PySide2.QtMultimedia as qm
+import PySide2.QtWidgets as qw
+
 
 def refresh(cursor, table, kinds, ids):
     cursor.executemany(
@@ -60,21 +65,8 @@ def get_audio(cursor, sentence, source_id):
     return file_path
 
 
-def recommend_sentence(args):
-    conn = sqlite3.connect(args.database)
-    c = conn.cursor()
-    c.execute('PRAGMA synchronous = off')
-    (id, text, source_url, source_id, license_url, creator, pronunciation,
-     payoff_effort_ratio) = next(c.execute(
-        f'''
-        SELECT id, text, source_url, source_id, license_url, creator, pronunciation,
-            unknown_percentage/unknown_factors as payoff_effort_ratio
-        FROM sentence
-        WHERE source_database = 'tatoeba'
-        ORDER BY payoff_effort_ratio DESC
-        LIMIT 1
-    '''))
-    lemmas = list(c.execute(
+def get_sentence_details(cursor, id):
+    lemmas = list(cursor.execute(
         f'''
         SELECT lemma.id, lemma.text, lemma.disambiguator
         FROM lemma, sentence_lemma
@@ -82,7 +74,7 @@ def recommend_sentence(args):
         AND lemma_id = lemma.id
         AND memory_strength IS NULL
         '''))
-    grammars = list(c.execute(
+    grammars = list(cursor.execute(
         f'''
         SELECT grammar.id, grammar.form
         FROM grammar, sentence_grammar
@@ -90,7 +82,7 @@ def recommend_sentence(args):
         AND grammar_id = grammar.id
         AND memory_strength IS NULL
         '''))
-    graphemes = list(c.execute(
+    graphemes = list(cursor.execute(
         f'''
         SELECT grapheme.id, grapheme.text
         FROM grapheme, sentence_grapheme
@@ -98,7 +90,7 @@ def recommend_sentence(args):
         AND grapheme_id = grapheme.id
         AND memory_strength IS NULL
         '''))
-    pronunciations = list(c.execute(
+    pronunciations = list(cursor.execute(
         f'''
         SELECT pronunciation.id, pronunciation.word, pronunciation.pronunciation
         FROM pronunciation, sentence_pronunciation
@@ -106,7 +98,7 @@ def recommend_sentence(args):
         AND pronunciation_id = pronunciation.id
         AND (forward_memory_strength IS NULL OR backward_memory_strength IS NULL)
         '''))
-    sounds = list(c.execute(
+    sounds = list(cursor.execute(
         f'''
         SELECT sound.id, sound.text
         FROM sound, sentence_sound
@@ -114,10 +106,12 @@ def recommend_sentence(args):
         AND sound_id = sound.id
         AND memory_strength IS NULL
         '''))
-    tatoeba_conn = sqlite3.connect(args.tatoeba_database)
-    tc = tatoeba_conn.cursor()
+    return lemmas, grammars, graphemes, pronunciations, sounds
+
+
+def get_translation(tatoeba_cursor, source_id, translation_language):
     try:
-        (translation,) = next(tc.execute(
+        (translation,) = next(tatoeba_cursor.execute(
             f'''
             SELECT sentences_detailed.text
             FROM sentences_detailed, links
@@ -125,16 +119,26 @@ def recommend_sentence(args):
             AND sentences_detailed.id = links.translation_id
             AND links.sentence_id = ?
             ''',
-            (args.translation_language, source_id)))
+            (translation_language, source_id)))
+        return translation
     except StopIteration:
-        translation = ''
-    audio_file = get_audio(tc, text.replace('\t', ''), source_id)
+        return ''
 
-    import PySide2.QtCore as qc
-    import PySide2.QtGui as qg
-    import PySide2.QtMultimedia as qm
-    import PySide2.QtWidgets as qw
-    app = qw.QApplication()
+
+def show_sentence_detail_dialog(
+        text,
+        pronunciation,
+        translation,
+        source_url,
+        creator,
+        license_url,
+        lemmas,
+        grammars,
+        graphemes,
+        pronunciations,
+        sounds,
+        audio_file,
+        callback):
     dialog = qw.QDialog()
     possible_fonts = qg.QFontDatabase().families(qg.QFontDatabase.Japanese)
     japanese_fonts = [font for font in possible_fonts if 'jp' in font.lower()]
@@ -183,17 +187,17 @@ def recommend_sentence(args):
         hlayout.addLayout(vlayout)
 
     def learn():
-        for table, kinds, memory_items, checkboxes in (
-                ('lemma', ('',), lemmas, lemma_checkboxes),
-                ('grammar', ('',), grammars, grammar_checkboxes),
-                ('grapheme', ('',), graphemes, grapheme_checkboxes),
-                ('pronunciation', ('forward_', 'backward_'), pronunciations, pronunciation_checkboxes),
-                ('sound', ('',), sounds, sound_checkboxes)):
-            refresh(c, table, kinds, [
-                (item[0],)
+        callback(**{
+            table+'_selected': [
+                item[0]
                 for item, checkbox in zip(memory_items, checkboxes)
-                if checkbox.isChecked()])
-        conn.commit()
+                if checkbox.isChecked()]
+            for table, memory_items, checkboxes in (
+                ('lemma', lemmas, lemma_checkboxes),
+                ('grammar', grammars, grammar_checkboxes),
+                ('grapheme', graphemes, grapheme_checkboxes),
+                ('pronunciation', pronunciations, pronunciation_checkboxes),
+                ('sound', sounds, sound_checkboxes))})
         dialog.accept()
 
     dialog.learn_button.clicked.connect(learn)
@@ -205,13 +209,59 @@ def recommend_sentence(args):
     vlayout.addWidget(dialog.attribution)
     vlayout.addWidget(dialog.learn_button)
     dialog.setLayout(vlayout)
+
+    dialog.playlist = qm.QMediaPlaylist()
+    dialog.playlist.addMedia(qc.QUrl.fromLocalFile(os.path.abspath(audio_file)))
+    dialog.playlist.setPlaybackMode(qm.QMediaPlaylist.Loop)
+    dialog.media_player = qm.QMediaPlayer()
+    dialog.media_player.setPlaylist(dialog.playlist)
+    dialog.media_player.play()
+
     dialog.show()
-    playlist = qm.QMediaPlaylist()
-    playlist.addMedia(qc.QUrl.fromLocalFile(os.path.abspath(audio_file)))
-    playlist.setPlaybackMode(qm.QMediaPlaylist.Loop)
-    media_player = qm.QMediaPlayer()
-    media_player.setPlaylist(playlist)
-    media_player.play()
+
+    return dialog
+
+
+def recommend_sentence(args):
+    conn = sqlite3.connect(args.database)
+    c = conn.cursor()
+    c.execute('PRAGMA synchronous = off')
+    (id, text, source_url, source_id, license_url, creator, pronunciation,
+     payoff_effort_ratio) = next(c.execute(
+        f'''
+        SELECT id, text, source_url, source_id, license_url, creator, pronunciation,
+            unknown_percentage/unknown_factors as payoff_effort_ratio
+        FROM sentence
+        WHERE source_database = 'tatoeba'
+        ORDER BY payoff_effort_ratio DESC
+        LIMIT 1
+    '''))
+    lemmas, grammars, graphemes, pronunciations, sounds = get_sentence_details(c, id)
+    tatoeba_conn = sqlite3.connect(args.tatoeba_database)
+    tc = tatoeba_conn.cursor()
+    translation = get_translation(tc, source_id, args.translation_language)
+    audio_file = get_audio(tc, text.replace('\t', ''), source_id)
+
+    app = qw.QApplication()
+
+    def refresh_callback(
+            lemma_selected, grammar_selected, grapheme_selected,
+            pronunciation_selected, sound_selected):
+        for table, kinds, selected in (
+                ('lemma', ('',), lemma_selected),
+                ('grammar', ('',), grammar_selected),
+                ('grapheme', ('',), grapheme_selected),
+                ('pronunciation', ('forward_', 'backward_'), pronunciation_selected),
+                ('sound', ('',), sound_selected)):
+            refresh(c, table, kinds, [(selection,) for selection in selected])
+        conn.commit()
+
+    dialog = show_sentence_detail_dialog(
+        text, pronunciation, translation,
+        source_url, creator, license_url,
+        lemmas, grammars, graphemes, pronunciations, sounds,
+        audio_file, refresh_callback)
+
     app.exec_()
 
 
