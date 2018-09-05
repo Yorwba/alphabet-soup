@@ -127,10 +127,8 @@ def create_tables():
     c.execute(
         '''
         CREATE TABLE IF NOT EXISTS review (
-            sentence_id REFERENCES sentence(id),
+            sentence_id integer REFERENCES sentence(id),
             type integer,
-            next_time real,
-            desired_log_retention real,
             summed_inverse_memory_strength real,
             inverse_memory_strength_weighted_last_refresh real)
         ''')
@@ -242,6 +240,30 @@ def create_refresh_trigger(cursor, table, kinds):
                     WHERE {table}_id = NEW.id);
             END
             ''')
+        cursor.execute(
+            f'''
+            CREATE TRIGGER IF NOT EXISTS {table}_{kind}refresh_review_trigger
+            AFTER UPDATE OF {kind}memory_strength, last_{kind}refresh ON {table}
+            FOR EACH ROW WHEN
+                OLD.{kind}memory_strength IS NOT NULL
+                AND NEW.{kind}memory_strength IS NOT NULL
+            BEGIN
+                UPDATE review SET
+                    summed_inverse_memory_strength =
+                        summed_inverse_memory_strength
+                        - 1/OLD.{kind}memory_strength
+                        + 1/NEW.{kind}memory_strength,
+                    inverse_memory_strength_weighted_last_refresh =
+                        inverse_memory_strength_weighted_last_refresh
+                        - OLD.last_{kind}refresh/OLD.{kind}memory_strength
+                        + NEW.last_{kind}refresh/NEW.{kind}memory_strength
+                WHERE sentence_id = NEW.id
+                AND review.type IN ({','.join(
+                    (() if kind == 'backward_' else (str(ReviewType.WRITING_TO_PRONUNCIATION.value),))
+                    +
+                    (() if kind == 'forward_' else (str(ReviewType.PRONUNCIATION_TO_WRITING.value),)))});
+            END
+            ''')
 
 
 def build_database(args):
@@ -293,6 +315,54 @@ def build_database(args):
     kindses = (('',), ('',), ('',), ('forward_', 'backward_'), ('',))
     for table, kinds in zip(tables, kindses):
         create_refresh_trigger(c, table, kinds)
+    c.execute(
+        f'''
+        CREATE TRIGGER IF NOT EXISTS sentence_learned_trigger
+        AFTER UPDATE OF unknown_factors ON sentence
+        FOR EACH ROW WHEN
+            OLD.unknown_factors > 0
+            AND NEW.unknown_factors = 0
+        BEGIN
+            INSERT INTO review (
+                sentence_id,
+                type,
+                summed_inverse_memory_strength,
+                inverse_memory_strength_weighted_last_refresh)
+            VALUES
+                (NEW.id,
+                {ReviewType.WRITING_TO_PRONUNCIATION.value},
+                {'+'.join(
+                    f"""
+                    (SELECT sum(1/{table}.{kind}memory_strength)
+                    FROM {table}, sentence_{table}
+                    WHERE {table}.id = {table}_id
+                    AND NEW.id = sentence_id)
+                    """ for table, kind in zip(tables, ('', '', '', 'forward_', '')))},
+                {'+'.join(
+                    f"""
+                    (SELECT sum({table}.last_{kind}refresh/{table}.{kind}memory_strength)
+                    FROM {table}, sentence_{table}
+                    WHERE {table}.id = {table}_id
+                    AND NEW.id = sentence_id)
+                    """ for table, kind in zip(tables, ('', '', '', 'forward_', '')))}),
+                (NEW.id,
+                {ReviewType.PRONUNCIATION_TO_WRITING.value},
+                {'+'.join(
+                    f"""
+                    (SELECT sum(1/{table}.{kind}memory_strength)
+                    FROM {table}, sentence_{table}
+                    WHERE {table}.id = {table}_id
+                    AND NEW.id = sentence_id)
+                    """ for table, kind in zip(tables, ('', '', '', 'backward_', '')))},
+                {'+'.join(
+                    f"""
+                    (SELECT sum({table}.last_{kind}refresh/{table}.{kind}memory_strength)
+                    FROM {table}, sentence_{table}
+                    WHERE {table}.id = {table}_id
+                    AND NEW.id = sentence_id)
+                    """ for table, kind in zip(tables, ('', '', '', 'backward_', '')))});
+        END
+        ''')
     c.execute(
         f'''
         UPDATE sentence SET

@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import math
 import sqlite3
 import subprocess
 
@@ -65,14 +66,14 @@ def get_audio(cursor, sentence, source_id):
     return file_path
 
 
-def get_sentence_details(cursor, id):
+def get_sentence_details(cursor, id, only_new=True):
     lemmas = list(cursor.execute(
         f'''
         SELECT lemma.id, lemma.text, lemma.disambiguator
         FROM lemma, sentence_lemma
         WHERE sentence_id = {id}
         AND lemma_id = lemma.id
-        AND memory_strength IS NULL
+        {'AND memory_strength IS NULL' if only_new else ''}
         '''))
     grammars = list(cursor.execute(
         f'''
@@ -80,7 +81,7 @@ def get_sentence_details(cursor, id):
         FROM grammar, sentence_grammar
         WHERE sentence_id = {id}
         AND grammar_id = grammar.id
-        AND memory_strength IS NULL
+        {'AND memory_strength IS NULL' if only_new else ''}
         '''))
     graphemes = list(cursor.execute(
         f'''
@@ -88,7 +89,7 @@ def get_sentence_details(cursor, id):
         FROM grapheme, sentence_grapheme
         WHERE sentence_id = {id}
         AND grapheme_id = grapheme.id
-        AND memory_strength IS NULL
+        {'AND memory_strength IS NULL' if only_new else ''}
         '''))
     pronunciations = list(cursor.execute(
         f'''
@@ -96,7 +97,7 @@ def get_sentence_details(cursor, id):
         FROM pronunciation, sentence_pronunciation
         WHERE sentence_id = {id}
         AND pronunciation_id = pronunciation.id
-        AND (forward_memory_strength IS NULL OR backward_memory_strength IS NULL)
+        {'AND (forward_memory_strength IS NULL OR backward_memory_strength IS NULL)' if only_new else ''}
         '''))
     sounds = list(cursor.execute(
         f'''
@@ -104,7 +105,7 @@ def get_sentence_details(cursor, id):
         FROM sound, sentence_sound
         WHERE sentence_id = {id}
         AND sound_id = sound.id
-        AND memory_strength IS NULL
+        {'AND memory_strength IS NULL' if only_new else ''}
         '''))
     return lemmas, grammars, graphemes, pronunciations, sounds
 
@@ -187,6 +188,8 @@ def show_sentence_detail_dialog(
         hlayout.addLayout(vlayout)
 
     def learn():
+        dialog.media_player.stop()
+        dialog.accept()
         callback(**{
             table+'_selected': [
                 item[0]
@@ -198,7 +201,6 @@ def show_sentence_detail_dialog(
                 ('grapheme', graphemes, grapheme_checkboxes),
                 ('pronunciation', pronunciations, pronunciation_checkboxes),
                 ('sound', sounds, sound_checkboxes))})
-        dialog.accept()
 
     dialog.learn_button.clicked.connect(learn)
 
@@ -265,13 +267,72 @@ def recommend_sentence(args):
     app.exec_()
 
 
+def review(args):
+    conn = sqlite3.connect(args.database)
+    c = conn.cursor()
+    c.execute('PRAGMA synchronous = off')
+    app = qw.QApplication()
+
+    scheduled_reviews = list(c.execute(
+        f'''
+        SELECT id, text, source_url, source_id, license_url, creator, pronunciation,
+            inverse_memory_strength_weighted_last_refresh
+            - julianday('now')*summed_inverse_memory_strength AS log_retention
+        FROM sentence, review
+        WHERE sentence.id = sentence_id
+        AND log_retention < ?
+        ORDER BY log_retention ASC
+        ''',
+        (math.log(args.desired_retention),)))
+
+    def generate_reviews():
+        for (id, text, source_url, source_id, license_url, creator, pronunciation,
+             log_retention) in scheduled_reviews:
+            print(log_retention, math.exp(log_retention))
+            lemmas, grammars, graphemes, pronunciations, sounds = get_sentence_details(c, id, only_new=False)
+            tatoeba_conn = sqlite3.connect(args.tatoeba_database)
+            tc = tatoeba_conn.cursor()
+            translation = get_translation(tc, source_id, args.translation_language)
+            audio_file = get_audio(tc, text.replace('\t', ''), source_id)
+
+            def review_callback(
+                    lemma_selected, grammar_selected, grapheme_selected,
+                    pronunciation_selected, sound_selected):
+                for table, kinds, selected in (
+                        ('lemma', ('',), lemma_selected),
+                        ('grammar', ('',), grammar_selected),
+                        ('grapheme', ('',), grapheme_selected),
+                        ('pronunciation', ('forward_', 'backward_'), pronunciation_selected),
+                        ('sound', ('',), sound_selected)):
+                    refresh(c, table, kinds, [(selection,) for selection in selected])
+                conn.commit()
+
+                try:
+                    next(review_generator)
+                except StopIteration:
+                    pass
+
+            dialog = show_sentence_detail_dialog(
+                text, pronunciation, translation,
+                source_url, creator, license_url,
+                lemmas, grammars, graphemes, pronunciations, sounds,
+                audio_file, review_callback)
+            yield
+
+    review_generator = generate_reviews()
+    next(review_generator)
+
+    app.exec_()
+
+
 def main(argv):
     parser = argparse.ArgumentParser(
         description='Example sentence recommender')
-    parser.add_argument('command', nargs=1, choices={'recommend-sentence'})
+    parser.add_argument('command', nargs=1, choices={'recommend-sentence', 'review'})
     parser.add_argument('--database', type=str, default='data/japanese_sentences.sqlite')
     parser.add_argument('--tatoeba-database', type=str, default='data/tatoeba.sqlite')
     parser.add_argument('--translation-language', type=str, default='eng')
+    parser.add_argument('--desired-retention', type=float, default=0.95)
     args = parser.parse_args(argv[1:])
 
     globals()[args.command[0].replace('-', '_')](args)
