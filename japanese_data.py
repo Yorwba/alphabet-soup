@@ -257,7 +257,10 @@ def create_refresh_trigger(cursor, table, kinds):
                         inverse_memory_strength_weighted_last_refresh
                         - OLD.last_{kind}refresh/OLD.{kind}memory_strength
                         + NEW.last_{kind}refresh/NEW.{kind}memory_strength
-                WHERE sentence_id = NEW.id
+                WHERE sentence_id IN (
+                    SELECT sentence_id
+                    FROM sentence_{table}
+                    WHERE {table}_id = NEW.id)
                 AND review.type IN ({','.join(
                     (() if kind == 'backward_' else (str(ReviewType.WRITING_TO_PRONUNCIATION.value),))
                     +
