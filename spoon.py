@@ -91,13 +91,21 @@ def get_sentence_details(cursor, id, only_new=True):
         AND grapheme_id = grapheme.id
         {'AND memory_strength IS NULL' if only_new else ''}
         '''))
-    pronunciations = list(cursor.execute(
+    forward_pronunciations = list(cursor.execute(
         f'''
         SELECT pronunciation.id, pronunciation.word, pronunciation.pronunciation
         FROM pronunciation, sentence_pronunciation
         WHERE sentence_id = {id}
         AND pronunciation_id = pronunciation.id
-        {'AND (forward_memory_strength IS NULL OR backward_memory_strength IS NULL)' if only_new else ''}
+        {'AND forward_memory_strength IS NULL' if only_new else ''}
+        '''))
+    backward_pronunciations = list(cursor.execute(
+        f'''
+        SELECT pronunciation.id, pronunciation.pronunciation, pronunciation.word
+        FROM pronunciation, sentence_pronunciation
+        WHERE sentence_id = {id}
+        AND pronunciation_id = pronunciation.id
+        {'AND backward_memory_strength IS NULL' if only_new else ''}
         '''))
     sounds = list(cursor.execute(
         f'''
@@ -107,7 +115,7 @@ def get_sentence_details(cursor, id, only_new=True):
         AND sound_id = sound.id
         {'AND memory_strength IS NULL' if only_new else ''}
         '''))
-    return lemmas, grammars, graphemes, pronunciations, sounds
+    return lemmas, grammars, graphemes, forward_pronunciations, backward_pronunciations, sounds
 
 
 def get_translation(tatoeba_cursor, source_id, translation_language):
@@ -136,7 +144,8 @@ def show_sentence_detail_dialog(
         lemmas,
         grammars,
         graphemes,
-        pronunciations,
+        forward_pronunciations,
+        backward_pronunciations,
         sounds,
         audio_file,
         callback):
@@ -171,13 +180,15 @@ def show_sentence_detail_dialog(
     lemma_checkboxes = []
     grammar_checkboxes = []
     grapheme_checkboxes = []
-    pronunciation_checkboxes = []
+    forward_pronunciation_checkboxes = []
+    backward_pronunciation_checkboxes = []
     sound_checkboxes = []
     for memory_items, checkboxes, template in (
             (lemmas, lemma_checkboxes, 'the meaning of %s (%s)'),
             (grammars, grammar_checkboxes, 'the form %s'),
             (graphemes, grapheme_checkboxes, 'writing %s'),
-            (pronunciations, pronunciation_checkboxes, '%s pronounced as %s'),
+            (forward_pronunciations, forward_pronunciation_checkboxes, '%s pronounced as %s'),
+            (backward_pronunciations, backward_pronunciation_checkboxes, '%s written as %s'),
             (sounds, sound_checkboxes, 'pronouncing %s')):
         vlayout = qw.QVBoxLayout()
         for item in memory_items:
@@ -199,7 +210,8 @@ def show_sentence_detail_dialog(
                 ('lemma', lemmas, lemma_checkboxes),
                 ('grammar', grammars, grammar_checkboxes),
                 ('grapheme', graphemes, grapheme_checkboxes),
-                ('pronunciation', pronunciations, pronunciation_checkboxes),
+                ('forward_pronunciation', forward_pronunciations, forward_pronunciation_checkboxes),
+                ('backward_pronunciation', backward_pronunciations, backward_pronunciation_checkboxes),
                 ('sound', sounds, sound_checkboxes))})
 
     dialog.learn_button.clicked.connect(learn)
@@ -238,7 +250,7 @@ def recommend_sentence(args):
         ORDER BY payoff_effort_ratio DESC
         LIMIT 1
     '''))
-    lemmas, grammars, graphemes, pronunciations, sounds = get_sentence_details(c, id)
+    lemmas, grammars, graphemes, forward_pronunciations, backward_pronunciations, sounds = get_sentence_details(c, id)
     tatoeba_conn = sqlite3.connect(args.tatoeba_database)
     tc = tatoeba_conn.cursor()
     translation = get_translation(tc, source_id, args.translation_language)
@@ -248,12 +260,14 @@ def recommend_sentence(args):
 
     def refresh_callback(
             lemma_selected, grammar_selected, grapheme_selected,
-            pronunciation_selected, sound_selected):
+            forward_pronunciation_selected, backward_pronunciation_selected,
+            sound_selected):
         for table, kinds, selected in (
                 ('lemma', ('',), lemma_selected),
                 ('grammar', ('',), grammar_selected),
                 ('grapheme', ('',), grapheme_selected),
-                ('pronunciation', ('forward_', 'backward_'), pronunciation_selected),
+                ('pronunciation', ('forward_',), forward_pronunciation_selected),
+                ('pronunciation', ('backward_',), backward_pronunciation_selected),
                 ('sound', ('',), sound_selected)):
             refresh(c, table, kinds, [(selection,) for selection in selected])
         conn.commit()
@@ -261,7 +275,8 @@ def recommend_sentence(args):
     dialog = show_sentence_detail_dialog(
         text, pronunciation, translation,
         source_url, creator, license_url,
-        lemmas, grammars, graphemes, pronunciations, sounds,
+        lemmas, grammars, graphemes,
+        forward_pronunciations, backward_pronunciations, sounds,
         audio_file, refresh_callback)
 
     app.exec_()
@@ -289,7 +304,7 @@ def review(args):
         for (id, text, source_url, source_id, license_url, creator, pronunciation,
              log_retention) in scheduled_reviews:
             print(log_retention, math.exp(log_retention))
-            lemmas, grammars, graphemes, pronunciations, sounds = get_sentence_details(c, id, only_new=False)
+            lemmas, grammars, graphemes, forward_pronunciations, backward_pronunciations, sounds = get_sentence_details(c, id, only_new=False)
             tatoeba_conn = sqlite3.connect(args.tatoeba_database)
             tc = tatoeba_conn.cursor()
             translation = get_translation(tc, source_id, args.translation_language)
@@ -297,12 +312,14 @@ def review(args):
 
             def review_callback(
                     lemma_selected, grammar_selected, grapheme_selected,
-                    pronunciation_selected, sound_selected):
+                    forward_pronunciation_selected, backward_pronunciation_selected,
+                    sound_selected):
                 for table, kinds, selected in (
                         ('lemma', ('',), lemma_selected),
                         ('grammar', ('',), grammar_selected),
                         ('grapheme', ('',), grapheme_selected),
-                        ('pronunciation', ('forward_', 'backward_'), pronunciation_selected),
+                        ('pronunciation', ('forward_',), forward_pronunciation_selected),
+                        ('pronunciation', ('backward_',), backward_pronunciation_selected),
                         ('sound', ('',), sound_selected)):
                     refresh(c, table, kinds, [(selection,) for selection in selected])
                 conn.commit()
@@ -315,7 +332,8 @@ def review(args):
             dialog = show_sentence_detail_dialog(
                 text, pronunciation, translation,
                 source_url, creator, license_url,
-                lemmas, grammars, graphemes, pronunciations, sounds,
+                lemmas, grammars, graphemes,
+                forward_pronunciations, backward_pronunciations, sounds,
                 audio_file, review_callback)
             yield
 
