@@ -427,6 +427,23 @@ def review(args):
                     check_callback)
             yield
 
+        (next_review,), = c.execute(
+            f'''
+            SELECT min(
+                    (inverse_memory_strength_weighted_last_refresh - ?)/
+                    summed_inverse_memory_strength)
+                - julianday('now')
+            FROM review
+            LIMIT 1
+            ''',
+            (math.log(args.desired_retention),))
+
+        dialog = qw.QMessageBox()
+        dialog.setText(f'Next review in {next_review} days')
+        dialog.show()
+
+        yield
+
     review_generator = generate_reviews()
     next(review_generator)
 
