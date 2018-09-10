@@ -11,6 +11,7 @@ import PySide2.QtGui as qg
 import PySide2.QtMultimedia as qm
 import PySide2.QtWidgets as qw
 
+from japanese_data import ReviewType
 
 def refresh(cursor, table, kinds, ids):
     cursor.executemany(
@@ -236,6 +237,79 @@ def show_sentence_detail_dialog(
     return dialog
 
 
+def show_writing_to_pronunciation_dialog(
+        text,
+        callback):
+    dialog = qw.QDialog()
+    possible_fonts = qg.QFontDatabase().families(qg.QFontDatabase.Japanese)
+    japanese_fonts = [font for font in possible_fonts if 'jp' in font.lower()]
+    font = qg.QFont(japanese_fonts[0])
+    dialog.setFont(font)
+    big_font = qg.QFont(font)
+    big_font.setPointSize(font.pointSize()*1.5)
+    dialog.text = qw.QLabel(text.replace('\t', ''))
+    dialog.text.setFont(big_font)
+    dialog.text.setTextInteractionFlags(qc.Qt.TextSelectableByMouse)
+    dialog.pronunciation_button = qw.QPushButton('Check pronunciation')
+    dialog.pronunciation_button.setDefault(True)
+
+    def check():
+        dialog.accept()
+        callback()
+
+    dialog.pronunciation_button.clicked.connect(check)
+
+    vlayout = qw.QVBoxLayout()
+    vlayout.addWidget(dialog.text)
+    vlayout.addWidget(dialog.pronunciation_button)
+    dialog.setLayout(vlayout)
+
+    dialog.show()
+
+    return dialog
+
+
+def show_pronunciation_to_writing_dialog(
+        pronunciation,
+        audio_file,
+        callback):
+    dialog = qw.QDialog()
+    possible_fonts = qg.QFontDatabase().families(qg.QFontDatabase.Japanese)
+    japanese_fonts = [font for font in possible_fonts if 'jp' in font.lower()]
+    font = qg.QFont(japanese_fonts[0])
+    dialog.setFont(font)
+    big_font = qg.QFont(font)
+    big_font.setPointSize(font.pointSize()*1.5)
+    dialog.pronunciation = qw.QLabel(pronunciation.replace('\t', ''))
+    dialog.pronunciation.setFont(big_font)
+    dialog.pronunciation.setTextInteractionFlags(qc.Qt.TextSelectableByMouse)
+    dialog.writing_button = qw.QPushButton('Check writing')
+    dialog.writing_button.setDefault(True)
+
+    def check():
+        dialog.media_player.stop()
+        dialog.accept()
+        callback()
+
+    dialog.writing_button.clicked.connect(check)
+
+    vlayout = qw.QVBoxLayout()
+    vlayout.addWidget(dialog.pronunciation)
+    vlayout.addWidget(dialog.writing_button)
+    dialog.setLayout(vlayout)
+
+    dialog.playlist = qm.QMediaPlaylist()
+    dialog.playlist.addMedia(qc.QUrl.fromLocalFile(os.path.abspath(audio_file)))
+    dialog.playlist.setPlaybackMode(qm.QMediaPlaylist.Loop)
+    dialog.media_player = qm.QMediaPlayer()
+    dialog.media_player.setPlaylist(dialog.playlist)
+    dialog.media_player.play()
+
+    dialog.show()
+
+    return dialog
+
+
 def recommend_sentence(args):
     conn = sqlite3.connect(args.database)
     c = conn.cursor()
@@ -292,7 +366,8 @@ def review(args):
         f'''
         SELECT id, text, source_url, source_id, license_url, creator, pronunciation,
             inverse_memory_strength_weighted_last_refresh
-            - julianday('now')*summed_inverse_memory_strength AS log_retention
+            - julianday('now')*summed_inverse_memory_strength AS log_retention,
+            review.type
         FROM sentence, review
         WHERE sentence.id = sentence_id
         AND log_retention < ?
@@ -302,9 +377,13 @@ def review(args):
 
     def generate_reviews():
         for (id, text, source_url, source_id, license_url, creator, pronunciation,
-             log_retention) in scheduled_reviews:
+             log_retention, review_type) in scheduled_reviews:
             print(log_retention, math.exp(log_retention))
             lemmas, grammars, graphemes, forward_pronunciations, backward_pronunciations, sounds = get_sentence_details(c, id, only_new=False)
+            if review_type == ReviewType.WRITING_TO_PRONUNCIATION.value:
+                backward_pronunciations = []
+            elif review_type == ReviewType.PRONUNCIATION_TO_WRITING.value:
+                forward_pronunciations = []
             tatoeba_conn = sqlite3.connect(args.tatoeba_database)
             tc = tatoeba_conn.cursor()
             translation = get_translation(tc, source_id, args.translation_language)
@@ -329,12 +408,23 @@ def review(args):
                 except StopIteration:
                     pass
 
-            dialog = show_sentence_detail_dialog(
-                text, pronunciation, translation,
-                source_url, creator, license_url,
-                lemmas, grammars, graphemes,
-                forward_pronunciations, backward_pronunciations, sounds,
-                audio_file, review_callback)
+            def check_callback():
+                dialog = show_sentence_detail_dialog(
+                    text, pronunciation, translation,
+                    source_url, creator, license_url,
+                    lemmas, grammars, graphemes,
+                    forward_pronunciations, backward_pronunciations, sounds,
+                    audio_file, review_callback)
+
+            if review_type == ReviewType.WRITING_TO_PRONUNCIATION.value:
+                dialog = show_writing_to_pronunciation_dialog(
+                    text,
+                    check_callback)
+            elif review_type == ReviewType.PRONUNCIATION_TO_WRITING.value:
+                dialog = show_pronunciation_to_writing_dialog(
+                    pronunciation,
+                    audio_file,
+                    check_callback)
             yield
 
     review_generator = generate_reviews()
