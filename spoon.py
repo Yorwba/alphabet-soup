@@ -20,8 +20,8 @@ def refresh(cursor, table, kinds, ids):
         {','.join(
             f"""
             {kind}memory_strength = IFNULL(
-                {kind}memory_strength + julianday("now") - last_{kind}refresh,
-                25),
+                {kind}memory_strength + 450*(julianday("now") - last_{kind}refresh),
+                450),
             last_{kind}refresh = julianday("now")
             """ for kind in kinds)}
         WHERE id = ?
