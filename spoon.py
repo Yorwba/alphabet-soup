@@ -379,6 +379,20 @@ def review(args):
         for (id, text, source_url, source_id, license_url, creator, pronunciation,
              log_retention, review_type) in scheduled_reviews:
             print(log_retention, math.exp(log_retention))
+            (log_retention,), = list(c.execute(
+                f'''
+                SELECT
+                    inverse_memory_strength_weighted_last_refresh
+                    - julianday('now')*summed_inverse_memory_strength AS log_retention
+                FROM review
+                WHERE sentence_id = ?
+                AND review.type = ?
+                LIMIT 1
+                ''',
+                (id, review_type)))
+            print(log_retention, math.exp(log_retention))
+            if log_retention > math.log(args.desired_retention):
+                continue
             lemmas, grammars, graphemes, forward_pronunciations, backward_pronunciations, sounds = get_sentence_details(c, id, only_new=False)
             if review_type == ReviewType.WRITING_TO_PRONUNCIATION.value:
                 backward_pronunciations = []
