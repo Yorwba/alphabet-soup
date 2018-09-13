@@ -395,6 +395,7 @@ def review(args):
                 continue
             lemmas, grammars, graphemes, forward_pronunciations, backward_pronunciations, sounds = get_sentence_details(c, id, only_new=False)
             if review_type == ReviewType.WRITING_TO_PRONUNCIATION.value:
+                graphemes = []
                 backward_pronunciations = []
             elif review_type == ReviewType.PRONUNCIATION_TO_WRITING.value:
                 forward_pronunciations = []
