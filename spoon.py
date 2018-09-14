@@ -184,19 +184,39 @@ def show_sentence_detail_dialog(
     forward_pronunciation_checkboxes = []
     backward_pronunciation_checkboxes = []
     sound_checkboxes = []
+
+    def writing_template(grapheme):
+        relative_path = f'data/kanjivg/kanji/{ord(grapheme):05x}.gif'
+        gif_path = os.path.join(os.path.dirname(__file__), relative_path)
+        return 'writing ', os.path.abspath(gif_path)
+
+    def format_template(template):
+        return lambda *args: (template % args, None)
+
     for memory_items, checkboxes, template in (
-            (lemmas, lemma_checkboxes, 'the meaning of %s (%s)'),
-            (grammars, grammar_checkboxes, 'the form %s'),
-            (graphemes, grapheme_checkboxes, 'writing %s'),
-            (forward_pronunciations, forward_pronunciation_checkboxes, '%s pronounced as %s'),
-            (backward_pronunciations, backward_pronunciation_checkboxes, '%s written as %s'),
-            (sounds, sound_checkboxes, 'pronouncing %s')):
+            (lemmas, lemma_checkboxes, format_template('the meaning of %s (%s)')),
+            (grammars, grammar_checkboxes, format_template('the form %s')),
+            (graphemes, grapheme_checkboxes, writing_template),
+            (forward_pronunciations, forward_pronunciation_checkboxes, format_template('%s pronounced as %s')),
+            (backward_pronunciations, backward_pronunciation_checkboxes, format_template('%s written as %s')),
+            (sounds, sound_checkboxes, format_template('pronouncing %s'))):
         vlayout = qw.QVBoxLayout()
         for item in memory_items:
-            checkbox = qw.QCheckBox(template % item[1:])
+            boxlabel, movie = template(*item[1:])
+            checkbox = qw.QCheckBox(boxlabel)
             checkbox.setCheckState(qc.Qt.CheckState.Checked)
             checkboxes.append(checkbox)
-            vlayout.addWidget(checkbox)
+            if movie:
+                boxlayout = qw.QHBoxLayout()
+                label = qw.QLabel()
+                movie = qg.QMovie(movie)
+                label.setMovie(movie)
+                movie.start()
+                boxlayout.addWidget(checkbox)
+                boxlayout.addWidget(label)
+                vlayout.addLayout(boxlayout)
+            else:
+                vlayout.addWidget(checkbox)
         hlayout.addLayout(vlayout)
 
     def learn():
