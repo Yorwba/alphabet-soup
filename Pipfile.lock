@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "7ef1bfb1d8f653afda644798e082d488b48496a6dfef8f5796dfeef7331398fe"
+            "sha256": "016c3531e713769154a93408e1fd1244ead73197edb3f529f4c16b30d756aa1e"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -16,6 +16,10 @@
         ]
     },
     "default": {
+        "kanjivg-gif": {
+            "git": "https://github.com/Yorwba/kanjivg-gif",
+            "ref": "c67a2434d32f3bfc1d5f4bf81b8d49a483732531"
+        },
         "pyside2": {
             "hashes": [
                 "sha256:09914eadc2e4f8834aa1937ed1abb58aeac6c7338be8ee7fafb180e19a6ef5ff",

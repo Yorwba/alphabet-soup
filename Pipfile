@@ -5,6 +5,7 @@ name = "pypi"
 
 [packages]
 "pyside2" = "*"
+kanjivg-gif = {git = "https://github.com/Yorwba/kanjivg-gif"}
 
 [dev-packages]
 

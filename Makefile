@@ -1,4 +1,4 @@
-.PHONY: all download-tatoeba
+.PHONY: all download-tatoeba download-aozora-index download-kanjivg kanjivg-gifs
 
 TATOEBA_FILENAMES := sentences_detailed links tags sentences_with_audio user_languages
 TATOEBA_FILES := $(addprefix data/tatoeba/,$(TATOEBA_FILENAMES))
@@ -55,3 +55,16 @@ kuromoji/target/kuromoji-1.0-jar-with-dependencies.jar: kuromoji/src/main/java/c
 
 data/japanese_sentences.sqlite: data/japanese_sentences.csv japanese_data.py kuromoji/target/kuromoji-1.0-jar-with-dependencies.jar
 	./japanese_data.py build-database --database=$@ --sentence-table=$<
+
+download-kanjivg:
+	wget --timestamping --directory-prefix=data/kanjivg/ \
+		https://github.com/KanjiVG/kanjivg/releases/download/r20160426/kanjivg-20160426-main.zip
+
+data/kanjivg/kanji/%.svg: data/kanjivg/kanjivg-20160426-main.zip
+	unzip -DD $< -d data/kanjivg/
+
+data/kanjivg/kanji/%.gif: data/kanjivg/kanji/%.svg
+	kanjivg-gif.py $<
+
+kanjivg-gifs: download-kanjivg
+	find data/kanjivg/kanji -name '*.svg' -exec kanjivg-gif.py '{}' '+'
