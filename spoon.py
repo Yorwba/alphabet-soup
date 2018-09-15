@@ -135,6 +135,26 @@ def get_translation(tatoeba_cursor, source_id, translation_language):
         return ''
 
 
+class MovieLabel(qw.QLabel):
+
+    def __init__(self, movie, size, hover_size=None):
+        super(MovieLabel, self).__init__()
+        if hover_size is None:
+            hover_size = size
+        self.size = size
+        self.hover_size = hover_size
+        movie = qg.QMovie(movie)
+        movie.setScaledSize(size)
+        movie.start()
+        self.setMovie(movie)
+
+    def enterEvent(self, event):
+        self.movie().setScaledSize(self.hover_size)
+
+    def leaveEvent(self, event):
+        self.movie().setScaledSize(self.size)
+
+
 def show_sentence_detail_dialog(
         text,
         pronunciation,
@@ -208,10 +228,10 @@ def show_sentence_detail_dialog(
             checkboxes.append(checkbox)
             if movie:
                 boxlayout = qw.QHBoxLayout()
-                label = qw.QLabel()
-                movie = qg.QMovie(movie)
-                label.setMovie(movie)
-                movie.start()
+                label = MovieLabel(
+                    movie,
+                    size=qc.QSize(font.pointSize()*2, font.pointSize()*2),
+                    hover_size=qc.QSize(-1, -1))
                 boxlayout.addWidget(checkbox)
                 boxlayout.addWidget(label)
                 vlayout.addLayout(boxlayout)
