@@ -9,6 +9,17 @@ import subprocess
 class ReviewType(Enum):
     WRITING_TO_PRONUNCIATION = 0
     PRONUNCIATION_TO_WRITING = 1
+ReviewType.WRITING_TO_PRONUNCIATION.tables_kinds = set((
+    ('lemma', ''),
+    ('grammar', ''),
+    ('pronunciation', 'forward_'),
+    ('sound', '')))
+ReviewType.PRONUNCIATION_TO_WRITING.tables_kinds = set((
+    ('lemma', ''),
+    ('grammar', ''),
+    ('grapheme', ''),
+    ('pronunciation', 'backward_'),
+    ('sound', '')))
 
 
 def create_link_table(cursor, table1, table2):
@@ -262,9 +273,9 @@ def create_refresh_trigger(cursor, table, kinds):
                     FROM sentence_{table}
                     WHERE {table}_id = NEW.id)
                 AND review.type IN ({','.join(
-                    (() if kind == 'backward_' else (str(ReviewType.WRITING_TO_PRONUNCIATION.value),))
-                    +
-                    (() if kind == 'forward_' else (str(ReviewType.PRONUNCIATION_TO_WRITING.value),)))});
+                    str(review_type.value)
+                    for review_type in ReviewType
+                    if (table, kind) in review_type.tables_kinds)});
             END
             ''')
 
@@ -332,38 +343,23 @@ def build_database(args):
                 summed_inverse_memory_strength,
                 inverse_memory_strength_weighted_last_refresh)
             VALUES
+            {','.join(
+                f"""
                 (NEW.id,
-                {ReviewType.WRITING_TO_PRONUNCIATION.value},
+                {review_type.value},
                 {'+'.join(
-                    f"""
-                    (SELECT sum(1/{table}.{kind}memory_strength)
-                    FROM {table}, sentence_{table}
-                    WHERE {table}.id = {table}_id
-                    AND NEW.id = sentence_id)
-                    """ for table, kind in zip(tables, ('', '', '', 'forward_', '')))},
+                    f'(SELECT sum(1/{table}.{kind}memory_strength)'
+                    f' FROM {table}, sentence_{table}'
+                    f' WHERE {table}.id = {table}_id'
+                    f' AND NEW.id = sentence_id)'
+                    for table, kind in review_type.tables_kinds)},
                 {'+'.join(
-                    f"""
-                    (SELECT sum({table}.last_{kind}refresh/{table}.{kind}memory_strength)
-                    FROM {table}, sentence_{table}
-                    WHERE {table}.id = {table}_id
-                    AND NEW.id = sentence_id)
-                    """ for table, kind in zip(tables, ('', '', '', 'forward_', '')))}),
-                (NEW.id,
-                {ReviewType.PRONUNCIATION_TO_WRITING.value},
-                {'+'.join(
-                    f"""
-                    (SELECT sum(1/{table}.{kind}memory_strength)
-                    FROM {table}, sentence_{table}
-                    WHERE {table}.id = {table}_id
-                    AND NEW.id = sentence_id)
-                    """ for table, kind in zip(tables, ('', '', '', 'backward_', '')))},
-                {'+'.join(
-                    f"""
-                    (SELECT sum({table}.last_{kind}refresh/{table}.{kind}memory_strength)
-                    FROM {table}, sentence_{table}
-                    WHERE {table}.id = {table}_id
-                    AND NEW.id = sentence_id)
-                    """ for table, kind in zip(tables, ('', '', '', 'backward_', '')))});
+                    f'(SELECT sum({table}.last_{kind}refresh/{table}.{kind}memory_strength)'
+                    f' FROM {table}, sentence_{table}'
+                    f' WHERE {table}.id = {table}_id'
+                    f' AND NEW.id = sentence_id)'
+                    for table, kind in review_type.tables_kinds)})
+                """ for review_type in ReviewType)};
         END
         ''')
     c.execute(

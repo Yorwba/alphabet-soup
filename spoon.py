@@ -434,11 +434,11 @@ def review(args):
             if log_retention > math.log(args.desired_retention):
                 continue
             lemmas, grammars, graphemes, forward_pronunciations, backward_pronunciations, sounds = get_sentence_details(c, id, only_new=False)
-            if review_type == ReviewType.WRITING_TO_PRONUNCIATION.value:
-                graphemes = []
-                backward_pronunciations = []
-            elif review_type == ReviewType.PRONUNCIATION_TO_WRITING.value:
-                forward_pronunciations = []
+            for table_kind in ('lemmas', 'grammars', 'graphemes', 'forward_pronunciations', 'backward_pronunciations', 'sounds'):
+                if not any(table_kind == kind+table+'s'
+                           for table, kind
+                           in ReviewType(review_type).tables_kinds):
+                    locals()[table_kind].clear()
             tatoeba_conn = sqlite3.connect(args.tatoeba_database)
             tc = tatoeba_conn.cursor()
             translation = get_translation(tc, source_id, args.translation_language)
