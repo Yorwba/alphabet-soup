@@ -170,6 +170,7 @@ def show_sentence_detail_dialog(
         sounds,
         audio_file,
         callback):
+    graphemes = sorted(graphemes, key=lambda grapheme: text.index(grapheme[1]))
     dialog = qw.QDialog()
     possible_fonts = qg.QFontDatabase().families(qg.QFontDatabase.Japanese)
     japanese_fonts = [font for font in possible_fonts if 'jp' in font.lower()]
