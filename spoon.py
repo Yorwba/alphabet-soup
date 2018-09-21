@@ -155,6 +155,22 @@ class MovieLabel(qw.QLabel):
         self.movie().setScaledSize(self.size)
 
 
+class VerticalScrollFrame(qw.QFrame):
+
+    def __init__(self):
+        super(VerticalScrollFrame, self).__init__()
+        scrollarea = qw.QScrollArea()
+        scrollarea.setWidgetResizable(True)
+        scrollarea.setHorizontalScrollBarPolicy(qc.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scrollarea.setWidget(self)
+        self.scrollarea = scrollarea
+
+    def resizeEvent(self, event):
+        self.scrollarea.setMinimumWidth(
+            self.sizeHint().width()
+            + self.scrollarea.verticalScrollBar().sizeHint().width())
+
+
 def show_sentence_detail_dialog(
         text,
         pronunciation,
@@ -221,6 +237,8 @@ def show_sentence_detail_dialog(
             (forward_pronunciations, forward_pronunciation_checkboxes, format_template('%s pronounced as %s')),
             (backward_pronunciations, backward_pronunciation_checkboxes, format_template('%s written as %s')),
             (sounds, sound_checkboxes, format_template('pronouncing %s'))):
+        if not memory_items:
+            continue
         vlayout = qw.QVBoxLayout()
         for item in memory_items:
             boxlabel, movie = template(*item[1:])
@@ -238,7 +256,9 @@ def show_sentence_detail_dialog(
                 vlayout.addLayout(boxlayout)
             else:
                 vlayout.addWidget(checkbox)
-        hlayout.addLayout(vlayout)
+        scrollframe = VerticalScrollFrame()
+        scrollframe.setLayout(vlayout)
+        hlayout.addWidget(scrollframe.scrollarea)
 
     def learn():
         dialog.media_player.stop()
