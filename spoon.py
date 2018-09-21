@@ -13,6 +13,10 @@ import PySide2.QtWidgets as qw
 
 from japanese_data import ReviewType
 
+
+MEMORY_STRENGTH_PER_DAY = 450
+
+
 def refresh(cursor, table, kinds, ids):
     cursor.executemany(
         f'''
@@ -20,9 +24,24 @@ def refresh(cursor, table, kinds, ids):
         {','.join(
             f"""
             {kind}memory_strength = IFNULL(
-                {kind}memory_strength + 450*(julianday("now") - last_{kind}refresh),
-                450),
+                {kind}memory_strength
+                + {MEMORY_STRENGTH_PER_DAY}*(
+                    julianday("now") - last_{kind}refresh) ,
+                {MEMORY_STRENGTH_PER_DAY}),
             last_{kind}refresh = julianday("now")
+            """ for kind in kinds)}
+        WHERE id = ?
+        ''',
+        ids)
+
+
+def relearn(cursor, table, kinds, ids):
+    cursor.executemany(
+        f'''
+        UPDATE {table} SET
+        {','.join(
+            f"""
+            {kind}memory_strength = {MEMORY_STRENGTH_PER_DAY}
             """ for kind in kinds)}
         WHERE id = ?
         ''',
@@ -264,10 +283,9 @@ def show_sentence_detail_dialog(
         dialog.media_player.stop()
         dialog.accept()
         callback(**{
-            table+'_selected': [
-                item[0]
-                for item, checkbox in zip(memory_items, checkboxes)
-                if checkbox.isChecked()]
+            table+'_selection': [
+                (item[0], checkbox.isChecked())
+                for item, checkbox in zip(memory_items, checkboxes)]
             for table, memory_items, checkboxes in (
                 ('lemma', lemmas, lemma_checkboxes),
                 ('grammar', grammars, grammar_checkboxes),
@@ -394,17 +412,18 @@ def recommend_sentence(args):
     app = qw.QApplication()
 
     def refresh_callback(
-            lemma_selected, grammar_selected, grapheme_selected,
-            forward_pronunciation_selected, backward_pronunciation_selected,
-            sound_selected):
-        for table, kinds, selected in (
-                ('lemma', ('',), lemma_selected),
-                ('grammar', ('',), grammar_selected),
-                ('grapheme', ('',), grapheme_selected),
-                ('pronunciation', ('forward_',), forward_pronunciation_selected),
-                ('pronunciation', ('backward_',), backward_pronunciation_selected),
-                ('sound', ('',), sound_selected)):
-            refresh(c, table, kinds, [(selection,) for selection in selected])
+            lemma_selection, grammar_selection, grapheme_selection,
+            forward_pronunciation_selection, backward_pronunciation_selection,
+            sound_selection):
+        for table, kinds, selection in (
+                ('lemma', ('',), lemma_selection),
+                ('grammar', ('',), grammar_selection),
+                ('grapheme', ('',), grapheme_selection),
+                ('pronunciation', ('forward_',), forward_pronunciation_selection),
+                ('pronunciation', ('backward_',), backward_pronunciation_selection),
+                ('sound', ('',), sound_selection)):
+            refresh(c, table, kinds, [
+                (id,) for id, selected in selection if selected])
         conn.commit()
 
     dialog = show_sentence_detail_dialog(
@@ -466,17 +485,20 @@ def review(args):
             audio_file = get_audio(tc, text.replace('\t', ''), source_id)
 
             def review_callback(
-                    lemma_selected, grammar_selected, grapheme_selected,
-                    forward_pronunciation_selected, backward_pronunciation_selected,
-                    sound_selected):
-                for table, kinds, selected in (
-                        ('lemma', ('',), lemma_selected),
-                        ('grammar', ('',), grammar_selected),
-                        ('grapheme', ('',), grapheme_selected),
-                        ('pronunciation', ('forward_',), forward_pronunciation_selected),
-                        ('pronunciation', ('backward_',), backward_pronunciation_selected),
-                        ('sound', ('',), sound_selected)):
-                    refresh(c, table, kinds, [(selection,) for selection in selected])
+                    lemma_selection, grammar_selection, grapheme_selection,
+                    forward_pronunciation_selection, backward_pronunciation_selection,
+                    sound_selection):
+                for table, kinds, selection in (
+                        ('lemma', ('',), lemma_selection),
+                        ('grammar', ('',), grammar_selection),
+                        ('grapheme', ('',), grapheme_selection),
+                        ('pronunciation', ('forward_',), forward_pronunciation_selection),
+                        ('pronunciation', ('backward_',), backward_pronunciation_selection),
+                        ('sound', ('',), sound_selection)):
+                    refresh(c, table, kinds, [
+                        (id,) for id, selected in selection if selected])
+                    relearn(c, table, kinds, [
+                        (id,) for id, selected in selection if not selected])
                 conn.commit()
 
                 try:
