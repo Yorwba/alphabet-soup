@@ -1,4 +1,5 @@
-.PHONY: all download-tatoeba download-aozora-index download-kanjivg kanjivg-gifs
+.PHONY: all download-tatoeba download-aozora-index \
+	download-kanjivg kanjivg-gifs download-jmdict
 
 TATOEBA_FILENAMES := sentences_detailed links tags sentences_with_audio user_languages
 TATOEBA_FILES := $(addprefix data/tatoeba/,$(TATOEBA_FILENAMES))
@@ -68,3 +69,7 @@ data/kanjivg/kanji/%.gif: data/kanjivg/kanji/%.svg
 
 kanjivg-gifs: download-kanjivg
 	find data/kanjivg/kanji -name '*.svg' -exec kanjivg-gif.py '{}' '+'
+
+download-jmdict:
+	wget --timestamping --directory-prefix=data/jmdict/ \
+		ftp://ftp.monash.edu.au/pub/nihongo/JMdict.gz
