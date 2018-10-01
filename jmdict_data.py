@@ -28,6 +28,12 @@ def create_tables():
             gloss text,
             PRIMARY KEY (ent_seq, variant, lang))
         ''')
+    c.execute(
+        '''
+        CREATE TABLE IF NOT EXISTS disambiguator_to_pos (
+            disambiguator text,
+            pos text)
+        ''')
 
 
 def read_dictionary(args):
@@ -107,10 +113,92 @@ def read_dictionary(args):
                     yield ent_seq, variant_number, kanji, pos, lang, '\n'.join(gloss)
 
 
+def associate_disambiguator_and_pos(args):
+    c = conn.cursor()
+    c.execute(f'ATTACH DATABASE ? as sentences', (args.sentence_database,))
+    while True:
+        disambiguator_pos_mappings = [
+            (set(disambiguators.split('\t')), set(pos.split('\t')), frequency)
+            for disambiguators, pos, frequency
+            in c.execute(
+            '''
+            WITH
+                unmatched_disambiguators AS (
+                    SELECT
+                        sentences.lemma.text as lemma,
+                        group_concat(disambiguator, "\t") as disambiguators
+                    FROM sentences.lemma
+                    WHERE disambiguator NOT IN (
+                        SELECT disambiguator
+                        FROM disambiguator_to_pos NATURAL JOIN entry
+                        WHERE entry.lemma = sentences.lemma.text)
+                    GROUP BY sentences.lemma.text),
+                possible_pos AS (
+                    SELECT
+                        lemma,
+                        group_concat(pos, "\t") as pos
+                    FROM entry
+                    GROUP BY lemma)
+            SELECT disambiguators, pos, count(*) as frequency
+            FROM unmatched_disambiguators NATURAL JOIN possible_pos
+            GROUP BY disambiguators, pos
+            ORDER BY frequency
+            ''')]
+        easy_cases = [
+            (disambiguator, next(iter(pos)))
+            for disambiguators, pos, frequency
+            in disambiguator_pos_mappings
+            if len(pos) == 1
+            for disambiguator in disambiguators]
+        c.executemany(
+            '''
+            INSERT INTO disambiguator_to_pos (disambiguator, pos)
+            VALUES (?, ?)
+            ''',
+            easy_cases)
+        if not easy_cases:
+            intersections = {}
+            for disambiguators, pos, frequency in disambiguator_pos_mappings:
+                for disambiguator in disambiguators:
+                    if disambiguator in intersections:
+                        intersections[disambiguator] =\
+                            intersections[disambiguator] & pos
+                    else:
+                        intersections[disambiguator] = pos
+            intersected_cases = [
+                (disambiguator, po)
+                for disambiguator, pos in intersections.items()
+                for po in pos]
+            c.executemany(
+                '''
+                INSERT INTO disambiguator_to_pos (disambiguator, pos)
+                VALUES (?, ?)
+                ''',
+                intersected_cases)
+            if not intersected_cases:
+                # TODO: maybe solve set cover instead?
+                remaining_cases = [
+                    (disambiguator, po)
+                    for disambiguators, pos, frequency
+                    in disambiguator_pos_mappings
+                    for disambiguator in disambiguators
+                    for po in pos]
+                c.executemany(
+                    '''
+                    INSERT INTO disambiguator_to_pos (disambiguator, pos)
+                    VALUES (?, ?)
+                    ''',
+                    remaining_cases)
+                if not remaining_cases:
+                    break
+
+
 def convert(args):
     global conn
     conn = sqlite3.connect(args.database)
+
     create_tables()
+
     c = conn.cursor()
     for (ent_seq, variant, kanji, pos, lang, gloss) in read_dictionary(args):
         c.execute(
@@ -126,6 +214,8 @@ def convert(args):
             ''',
             (ent_seq, variant, lang, gloss))
 
+    associate_disambiguator_and_pos(args)
+
     conn.commit()
 
 
@@ -135,6 +225,7 @@ def main(argv):
     parser.add_argument('command', nargs=1, choices={'convert'})
     parser.add_argument('--jmdict', type=str, default='data/jmdict/JMdict.gz')
     parser.add_argument('--database', type=str, default='data/japanese_dictionary.sqlite')
+    parser.add_argument('--sentence-database', type=str, default='data/japanese_sentences.sqlite')
     args = parser.parse_args(argv[1:])
 
     globals()[args.command[0].replace('-', '_')](args)
