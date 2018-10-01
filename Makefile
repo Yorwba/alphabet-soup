@@ -20,10 +20,10 @@ data/tatoeba/%.csv: data/tatoeba/%.tar.bz2
 	tar --directory=data/tatoeba/ --extract --bzip2 --touch --file=$<
 
 data/tatoeba.sqlite: tatoeba_data.py $(TATOEBA_CSVS)
-	./tatoeba_data.py build-database --database=$@
+	pipenv run ./tatoeba_data.py build-database --database=$@
 
 data/tatoeba_sentences_%.csv: data/tatoeba.sqlite tatoeba_data.py
-	./tatoeba_data.py filter-language --database=$< \
+	pipenv run ./tatoeba_data.py filter-language --database=$< \
 		--language=$* --minimum-level=5 > $@
 
 download-aozora-index:
@@ -38,7 +38,7 @@ data/aozora/list_person_%.csv: data/aozora/list_person_%.zip
 	unzip -DD $< -d data/aozora/
 
 data/aozora/modern_works.urls: aozora_data.py data/aozora/list_person_all_extended_utf8.csv
-	./aozora_data.py modern-works > $@
+	pipenv run ./aozora_data.py modern-works > $@
 
 data/aozora/files: data/aozora/modern_works.urls
 	wget --timestamping --directory-prefix=data/aozora/files/ \
@@ -46,7 +46,7 @@ data/aozora/files: data/aozora/modern_works.urls
 	touch data/aozora/files
 
 data/aozora_sentences.csv: aozora_data.py data/aozora/files
-	./aozora_data.py extract-sentences > $@
+	pipenv run ./aozora_data.py extract-sentences > $@
 
 data/japanese_sentences.csv: data/tatoeba_sentences_jpn.csv data/aozora_sentences.csv
 	cat $^ > $@
@@ -55,7 +55,7 @@ kuromoji/target/kuromoji-1.0-jar-with-dependencies.jar: kuromoji/src/main/java/c
 	cd kuromoji; mvn clean compile assembly:single
 
 data/japanese_sentences.sqlite: data/japanese_sentences.csv japanese_data.py kuromoji/target/kuromoji-1.0-jar-with-dependencies.jar
-	./japanese_data.py build-database --database=$@ --sentence-table=$<
+	pipenv run ./japanese_data.py build-database --database=$@ --sentence-table=$<
 
 download-kanjivg:
 	wget --timestamping --directory-prefix=data/kanjivg/ \
@@ -65,10 +65,10 @@ data/kanjivg/kanji/%.svg: data/kanjivg/kanjivg-20160426-main.zip
 	unzip -DD $< -d data/kanjivg/
 
 data/kanjivg/kanji/%.gif: data/kanjivg/kanji/%.svg
-	kanjivg-gif.py $<
+	pipenv run kanjivg-gif.py $<
 
 kanjivg-gifs: download-kanjivg
-	find data/kanjivg/kanji -name '*.svg' -exec kanjivg-gif.py '{}' '+'
+	pipenv run find data/kanjivg/kanji -name '*.svg' -exec kanjivg-gif.py '{}' '+'
 
 download-jmdict:
 	wget --timestamping --directory-prefix=data/jmdict/ \
