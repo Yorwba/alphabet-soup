@@ -66,7 +66,12 @@ def read_dictionary(args):
                     if not restrictions or kanji in restrictions:
                         kanji_readings.append((kanji, reading))
 
-            kanji_pos_glosses = defaultdict(lambda: defaultdict(list))
+            # (readings, miscellaneous) by [(kanji, pos)][lang][gloss]
+            rm_by_kplg = \
+                defaultdict(
+                    lambda: defaultdict(
+                        lambda: defaultdict(
+                            lambda: (set(), set()))))
             parts_of_speech = frozenset()
             miscellanea = frozenset()
             for sense in senses:
@@ -101,16 +106,51 @@ def read_dictionary(args):
                         (not reading_restrictions
                          or reading in reading_restrictions)):
                         for pos in parts_of_speech:
+                            rm_by_lg = rm_by_kplg[(kanji, pos)]
                             for lang, gloss in glosses.items():
-                                kanji_pos_gloss = kanji_pos_glosses[(kanji, pos)][lang]
-                                kanji_pos_gloss.append(f'[{reading}]:')
-                                if miscellanea:
-                                    kanji_pos_gloss.append(f'({", ".join(miscellanea)})')
-                                kanji_pos_gloss.extend(gloss)
+                                rm_by_g = rm_by_lg[lang]
+                                for glos in gloss:
+                                    readings, misc = rm_by_g[glos]
+                                    readings.add(reading)
+                                    misc.update(miscellanea)
 
-            for variant_number, ((kanji, pos), glosses) in enumerate(kanji_pos_glosses.items()):
+                # gloss by [(kanji, pos)][lang][{reading}][{misc}]
+                g_by_kplrm = \
+                    defaultdict(
+                        lambda: defaultdict(
+                            lambda: defaultdict(
+                                lambda: defaultdict(
+                                    list))))
+                for kp, rm_by_lg in rm_by_kplg.items():
+                    g_by_lrm = g_by_kplrm[kp]
+                    for lang, rm_by_g in rm_by_lg.items():
+                        g_by_rm = g_by_lrm[lang]
+                        for gloss, (readings, misc) in rm_by_g.items():
+                            readings = frozenset(readings)
+                            misc = frozenset(misc)
+                            g_by_rm[readings][misc].append(gloss)
+
+                # gloss by [(kanji, pos)][lang]
+                g_by_kpl = {
+                    kp: {
+                        lang:
+                        '\n\n'.join(
+                            '\n'.join(
+                                [', '.join(
+                                    f'[{reading}]'
+                                    for reading in readings)
+                                 +':']
+                                + ['\n'.join(
+                                    [f'\n({", ".join(misc)})' if misc else '']
+                                    + gloss)
+                                   for misc, gloss in g_by_m.items()])
+                            for reading, g_by_m in g_by_rm.items())
+                        for lang, g_by_rm in g_by_lrm.items()}
+                    for kp, g_by_lrm in g_by_kplrm.items()}
+
+            for variant_number, ((kanji, pos), glosses) in enumerate(g_by_kpl.items()):
                 for lang, gloss in glosses.items():
-                    yield ent_seq, variant_number, kanji, pos, lang, '\n'.join(gloss)
+                    yield ent_seq, variant_number, kanji, pos, lang, gloss
 
 
 def associate_disambiguator_and_pos(args):

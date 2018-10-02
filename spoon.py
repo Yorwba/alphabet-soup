@@ -175,7 +175,7 @@ def get_dictionary_gloss(cursor, lemma, disambiguator, translation_language):
                 AND lang = ?
             ''',
             (lemma, disambiguator, translation_language)))
-    return '\n'.join(glosses)
+    return '\n\n'.join(glosses)
 
 
 class MovieLabel(qw.QLabel):
