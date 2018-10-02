@@ -86,7 +86,7 @@ def get_audio(cursor, sentence, source_id):
     return file_path
 
 
-def get_sentence_details(cursor, id, only_new=True):
+def get_sentence_details(cursor, id, only_new=True, translation_language='eng'):
     lemmas = list(cursor.execute(
         f'''
         SELECT lemma.id, lemma.text, lemma.disambiguator
@@ -95,6 +95,13 @@ def get_sentence_details(cursor, id, only_new=True):
         AND lemma_id = lemma.id
         {'AND memory_strength IS NULL' if only_new else ''}
         '''))
+    lemmas = [
+        (id,
+         text,
+         disambiguator,
+         get_dictionary_gloss(cursor, text, disambiguator, translation_language))
+        for (id, text, disambiguator)
+        in lemmas]
     grammars = list(cursor.execute(
         f'''
         SELECT grammar.id, grammar.form
@@ -152,6 +159,23 @@ def get_translation(tatoeba_cursor, source_id, translation_language):
         return translation
     except StopIteration:
         return ''
+
+
+def get_dictionary_gloss(cursor, lemma, disambiguator, translation_language):
+    glosses = set(
+        gloss
+        for (gloss,) in cursor.execute(
+            '''
+            SELECT gloss
+            FROM dictionary.disambiguator_to_pos
+                NATURAL JOIN dictionary.entry
+                NATURAL JOIN dictionary.gloss
+            WHERE lemma = ?
+                AND disambiguator = ?
+                AND lang = ?
+            ''',
+            (lemma, disambiguator, translation_language)))
+    return '\n'.join(glosses)
 
 
 class MovieLabel(qw.QLabel):
@@ -241,16 +265,25 @@ def show_sentence_detail_dialog(
     backward_pronunciation_checkboxes = []
     sound_checkboxes = []
 
+    def lemma_template(lemma, disambiguator, gloss):
+        text = 'the meaning of %s (%s)' % (lemma, disambiguator)
+        movie = None
+        tooltip = gloss
+        return text, movie, tooltip
+
     def writing_template(grapheme):
         relative_path = f'data/kanjivg/kanji/{ord(grapheme):05x}.gif'
         gif_path = os.path.join(os.path.dirname(__file__), relative_path)
-        return 'writing ', os.path.abspath(gif_path)
+        text = 'writing '
+        movie = os.path.abspath(gif_path)
+        tooltip = grapheme
+        return text, movie, tooltip
 
     def format_template(template):
-        return lambda *args: (template % args, None)
+        return lambda *args: (template % args, None, None)
 
     for memory_items, checkboxes, template in (
-            (lemmas, lemma_checkboxes, format_template('the meaning of %s (%s)')),
+            (lemmas, lemma_checkboxes, lemma_template),
             (grammars, grammar_checkboxes, format_template('the form %s')),
             (graphemes, grapheme_checkboxes, writing_template),
             (forward_pronunciations, forward_pronunciation_checkboxes, format_template('%s pronounced as %s')),
@@ -260,9 +293,11 @@ def show_sentence_detail_dialog(
             continue
         vlayout = qw.QVBoxLayout()
         for item in memory_items:
-            boxlabel, movie = template(*item[1:])
+            boxlabel, movie, tooltip = template(*item[1:])
             checkbox = qw.QCheckBox(boxlabel)
             checkbox.setCheckState(qc.Qt.CheckState.Checked)
+            if tooltip:
+                checkbox.setToolTip(tooltip)
             checkboxes.append(checkbox)
             if movie:
                 boxlayout = qw.QHBoxLayout()
@@ -393,6 +428,7 @@ def recommend_sentence(args):
     conn = sqlite3.connect(args.database)
     c = conn.cursor()
     c.execute('PRAGMA synchronous = off')
+    c.execute('ATTACH DATABASE ? AS dictionary', (args.dictionary_database,))
     (id, text, source_url, source_id, license_url, creator, pronunciation,
      payoff_effort_ratio) = next(c.execute(
         f'''
@@ -440,6 +476,7 @@ def review(args):
     conn = sqlite3.connect(args.database)
     c = conn.cursor()
     c.execute('PRAGMA synchronous = off')
+    c.execute('ATTACH DATABASE ? AS dictionary', (args.dictionary_database,))
     app = qw.QApplication()
 
     scheduled_reviews = list(c.execute(
@@ -554,6 +591,7 @@ def main(argv):
     parser.add_argument('command', nargs=1, choices={'recommend-sentence', 'review'})
     parser.add_argument('--database', type=str, default='data/japanese_sentences.sqlite')
     parser.add_argument('--tatoeba-database', type=str, default='data/tatoeba.sqlite')
+    parser.add_argument('--dictionary-database', type=str, default='data/japanese_dictionary.sqlite')
     parser.add_argument('--translation-language', type=str, default='eng')
     parser.add_argument('--desired-retention', type=float, default=0.95)
     args = parser.parse_args(argv[1:])
