@@ -16,8 +16,11 @@ def create_tables():
             variant integer,
             lemma text,
             pos text,
-            PRIMARY KEY (lemma, pos),
-            UNIQUE (ent_seq, variant))
+            PRIMARY KEY (ent_seq, variant))
+        ''')
+    c.execute(
+        '''
+        CREATE INDEX entry_lemma_pos_index ON entry (lemma, pos)
         ''')
     c.execute(
         '''
