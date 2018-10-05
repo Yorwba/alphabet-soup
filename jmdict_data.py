@@ -108,14 +108,20 @@ def read_dictionary(args):
                         and
                         (not reading_restrictions
                          or reading in reading_restrictions)):
-                        for pos in parts_of_speech:
-                            rm_by_lg = rm_by_kplg[(kanji, pos)]
-                            for lang, gloss in glosses.items():
-                                rm_by_g = rm_by_lg[lang]
-                                for glos in gloss:
-                                    readings, misc = rm_by_g[glos]
-                                    readings.add(reading)
-                                    misc.update(miscellanea)
+                        if (kanji != reading and
+                                'word usually written using kana alone' in miscellanea):
+                            lemma_options = [kanji, reading]
+                        else:
+                            lemma_options = [kanji]
+                        for lemma in lemma_options:
+                            for pos in parts_of_speech:
+                                rm_by_lg = rm_by_kplg[(lemma, pos)]
+                                for lang, gloss in glosses.items():
+                                    rm_by_g = rm_by_lg[lang]
+                                    for glos in gloss:
+                                        readings, misc = rm_by_g[glos]
+                                        readings.add(reading)
+                                        misc.update(miscellanea)
 
                 # gloss by [(kanji, pos)][lang][{reading}][{misc}]
                 g_by_kplrm = \
