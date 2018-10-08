@@ -162,6 +162,7 @@ def get_translation(tatoeba_cursor, source_id, translation_language):
 
 
 def get_dictionary_gloss(cursor, lemma, disambiguator, translation_language):
+    lemma = lemma.split('-')[0]
     glosses = set(
         gloss
         for (gloss,) in cursor.execute(
