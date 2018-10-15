@@ -183,6 +183,25 @@ def get_dictionary_gloss(cursor, lemma, disambiguator, translation_language):
     return '\n\n'.join(glosses)
 
 
+def get_scheduled_reviews(cursor, desired_retention):
+    while True:
+        try:
+            yield next(cursor.execute(
+                f'''
+                SELECT id, text, source_url, source_id, license_url, creator, pronunciation,
+                    inverse_memory_strength_weighted_last_refresh
+                    - julianday('now')*summed_inverse_memory_strength AS log_retention,
+                    review.type
+                FROM sentence, review
+                WHERE sentence.id = sentence_id
+                AND log_retention < ?
+                ORDER BY log_retention ASC
+                LIMIT 1
+                ''',
+                (math.log(desired_retention),)))
+        except StopIteration:
+            break
+
 class MovieLabel(qw.QLabel):
 
     def __init__(self, movie, size, hover_size=None):
@@ -484,37 +503,9 @@ def review(args):
     c.execute('ATTACH DATABASE ? AS dictionary', (args.dictionary_database,))
     app = qw.QApplication()
 
-    scheduled_reviews = list(c.execute(
-        f'''
-        SELECT id, text, source_url, source_id, license_url, creator, pronunciation,
-            inverse_memory_strength_weighted_last_refresh
-            - julianday('now')*summed_inverse_memory_strength AS log_retention,
-            review.type
-        FROM sentence, review
-        WHERE sentence.id = sentence_id
-        AND log_retention < ?
-        ORDER BY log_retention ASC
-        ''',
-        (math.log(args.desired_retention),)))
-
     def generate_reviews():
         for (id, text, source_url, source_id, license_url, creator, pronunciation,
-             log_retention, review_type) in scheduled_reviews:
-            print(log_retention, math.exp(log_retention))
-            (log_retention,), = list(c.execute(
-                f'''
-                SELECT
-                    inverse_memory_strength_weighted_last_refresh
-                    - julianday('now')*summed_inverse_memory_strength AS log_retention
-                FROM review
-                WHERE sentence_id = ?
-                AND review.type = ?
-                LIMIT 1
-                ''',
-                (id, review_type)))
-            print(log_retention, math.exp(log_retention))
-            if log_retention > math.log(args.desired_retention):
-                continue
+             log_retention, review_type) in get_scheduled_reviews(c, args.desired_retention):
             lemmas, grammars, graphemes, forward_pronunciations, backward_pronunciations, sounds = get_sentence_details(c, id, only_new=False)
             for table_kind in ('lemmas', 'grammars', 'graphemes', 'forward_pronunciations', 'backward_pronunciations', 'sounds'):
                 if not any(table_kind == kind+table+'s'
