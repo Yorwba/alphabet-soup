@@ -13,8 +13,12 @@ import PySide2.QtWidgets as qw
 
 from japanese_data import ReviewType
 
+#: Let's say 1 in 20 reviewed sentences containing a forgotten word is okay.
+DEFAULT_RETENTION = 0.95
 
-MEMORY_STRENGTH_PER_DAY = 450
+#: Strength which makes retention drop below DEFAULT RETENTION within a day.
+#: (Assuming 3 details are learned at once [word, to/from pronunciation].)
+MEMORY_STRENGTH_PER_DAY = -3/math.log(DEFAULT_RETENTION)
 
 
 def refresh(cursor, table, kinds, ids):
@@ -594,7 +598,7 @@ def main(argv):
     parser.add_argument('--tatoeba-database', type=str, default='data/tatoeba.sqlite')
     parser.add_argument('--dictionary-database', type=str, default='data/japanese_dictionary.sqlite')
     parser.add_argument('--translation-language', type=str, default='eng')
-    parser.add_argument('--desired-retention', type=float, default=0.95)
+    parser.add_argument('--desired-retention', type=float, default=DEFAULT_RETENTION)
     args = parser.parse_args(argv[1:])
 
     globals()[args.command[0].replace('-', '_')](args)
