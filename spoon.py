@@ -20,6 +20,9 @@ DEFAULT_RETENTION = 0.95
 #: (Assuming 3 details are learned at once [word, to/from pronunciation].)
 MEMORY_STRENGTH_PER_DAY = -3/math.log(DEFAULT_RETENTION)
 
+#: Wait this long (in days) before showing what needs to be relearned.
+RELEARN_GRACE_PERIOD = 5/(24*60)  # 5 minutes
+
 
 def refresh(cursor, table, kinds, ids):
     cursor.executemany(
@@ -45,7 +48,8 @@ def relearn(cursor, table, kinds, ids):
         UPDATE {table} SET
         {','.join(
             f"""
-            {kind}memory_strength = {MEMORY_STRENGTH_PER_DAY}
+            {kind}memory_strength = {MEMORY_STRENGTH_PER_DAY*RELEARN_GRACE_PERIOD},
+            last_{kind}refresh = julianday("now")+{RELEARN_GRACE_PERIOD}
             """ for kind in kinds)}
         WHERE id = ?
         ''',
