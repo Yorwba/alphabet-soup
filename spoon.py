@@ -226,6 +226,9 @@ class MovieLabel(qw.QLabel):
     def leaveEvent(self, event):
         self.movie().setScaledSize(self.size)
 
+    def __del__(self):
+        self.movie().deleteLater()
+
 
 class VerticalScrollFrame(qw.QFrame):
 
@@ -241,6 +244,13 @@ class VerticalScrollFrame(qw.QFrame):
         self.scrollarea.setMinimumWidth(
             self.sizeHint().width()
             + self.scrollarea.verticalScrollBar().sizeHint().width())
+
+
+def EphemeralDialog():
+    """Creates a dialog that deletes itself when closed."""
+    dialog = qw.QDialog()
+    dialog.setAttribute(qc.Qt.WA_DeleteOnClose)
+    return dialog
 
 
 def show_sentence_detail_dialog(
@@ -259,7 +269,7 @@ def show_sentence_detail_dialog(
         audio_file,
         callback):
     graphemes = sorted(graphemes, key=lambda grapheme: text.index(grapheme[1]))
-    dialog = qw.QDialog()
+    dialog = EphemeralDialog()
     possible_fonts = qg.QFontDatabase().families(qg.QFontDatabase.Japanese)
     japanese_fonts = [font for font in possible_fonts if 'jp' in font.lower()]
     font = qg.QFont(japanese_fonts[0])
@@ -383,7 +393,7 @@ def show_sentence_detail_dialog(
 def show_writing_to_pronunciation_dialog(
         text,
         callback):
-    dialog = qw.QDialog()
+    dialog = EphemeralDialog()
     possible_fonts = qg.QFontDatabase().families(qg.QFontDatabase.Japanese)
     japanese_fonts = [font for font in possible_fonts if 'jp' in font.lower()]
     font = qg.QFont(japanese_fonts[0])
@@ -416,7 +426,7 @@ def show_pronunciation_to_writing_dialog(
         pronunciation,
         audio_file,
         callback):
-    dialog = qw.QDialog()
+    dialog = EphemeralDialog()
     possible_fonts = qg.QFontDatabase().families(qg.QFontDatabase.Japanese)
     japanese_fonts = [font for font in possible_fonts if 'jp' in font.lower()]
     font = qg.QFont(japanese_fonts[0])
