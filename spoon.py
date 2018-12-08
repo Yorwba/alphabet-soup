@@ -58,8 +58,11 @@ def relearn(cursor, table, kinds, ids):
 
 
 def get_audio(cursor, sentence, source_id):
+    filename = sentence
+    while len(filename.encode('utf-8')) > 100:
+        filename = filename[:-2]+'…'
     for ext in ('wav', 'mp3'):
-        path = f'data/audio/{sentence}.{ext}'
+        path = f'data/audio/{filename}.{ext}'
         if os.path.isfile(path):
             return path
 
@@ -72,7 +75,7 @@ def get_audio(cursor, sentence, source_id):
             ''',
             (source_id,)))
         url = f'https://audio.tatoeba.org/sentences/jpn/{source_id}.mp3'
-        file_path = f'data/audio/{sentence}.mp3'
+        file_path = f'data/audio/{filename}.mp3'
         import urllib.request
         urllib.request.urlretrieve(url, file_path)
         print(f'Downloaded audio by {creator} ({attribution}), '
@@ -81,7 +84,7 @@ def get_audio(cursor, sentence, source_id):
     except StopIteration:  # no audio on Tatoeba
         pass
 
-    file_path = f'data/audio/{sentence}.wav'
+    file_path = f'data/audio/{filename}.wav'
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     subprocess.run(
         ['open_jtalk',
