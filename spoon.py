@@ -522,8 +522,10 @@ def review(args):
     app = qw.QApplication()
 
     def generate_reviews():
+        num_reviews = 0
         for (id, text, source_url, source_id, license_url, creator, pronunciation,
              log_retention, review_type) in get_scheduled_reviews(c, args.desired_retention):
+            num_reviews += 1
             lemmas, grammars, graphemes, forward_pronunciations, backward_pronunciations, sounds = get_sentence_details(c, id, only_new=False)
             for table_kind in ('lemmas', 'grammars', 'graphemes', 'forward_pronunciations', 'backward_pronunciations', 'sounds'):
                 if not any(table_kind == kind+table+'s'
@@ -592,7 +594,9 @@ def review(args):
 
             next_review = str(datetime.timedelta(next_review)).split('.')[0]
 
-            dialog.setText(f'Next review in {next_review}.')
+            dialog.setText(
+                f'You reviewed {num_reviews} sentences.\n'
+                f'Next review in {next_review}.')
 
         refresh_dialog()
         timer = qc.QTimer()
