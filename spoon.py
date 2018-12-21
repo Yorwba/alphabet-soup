@@ -98,7 +98,7 @@ def get_audio(cursor, sentence, source_id):
     return file_path
 
 
-def get_sentence_details(cursor, id, only_new=True, translation_language='eng'):
+def get_sentence_details(cursor, id, only_new=True, translation_languages=['eng']):
     lemmas = list(cursor.execute(
         f'''
         SELECT lemma.id, lemma.text, lemma.disambiguator
@@ -111,7 +111,7 @@ def get_sentence_details(cursor, id, only_new=True, translation_language='eng'):
         (id,
          text,
          disambiguator,
-         get_dictionary_gloss(cursor, text, disambiguator, translation_language))
+         get_dictionary_gloss(cursor, text, disambiguator, translation_languages))
         for (id, text, disambiguator)
         in lemmas]
     grammars = list(cursor.execute(
@@ -157,26 +157,29 @@ def get_sentence_details(cursor, id, only_new=True, translation_language='eng'):
     return lemmas, grammars, graphemes, forward_pronunciations, backward_pronunciations, sounds
 
 
-def get_translation(tatoeba_cursor, source_id, translation_language):
-    try:
-        (translation,) = next(tatoeba_cursor.execute(
-            f'''
-            SELECT sentences_detailed.text
-            FROM sentences_detailed, links
-            WHERE sentences_detailed.lang = ?
-            AND sentences_detailed.id = links.translation_id
-            AND links.sentence_id = ?
-            ''',
-            (translation_language, source_id)))
-        return translation
-    except StopIteration:
-        return ''
+def get_translation(tatoeba_cursor, source_id, translation_languages):
+    for lang in translation_languages:
+        try:
+            (translation,) = next(tatoeba_cursor.execute(
+                f'''
+                SELECT sentences_detailed.text
+                FROM sentences_detailed, links
+                WHERE sentences_detailed.lang = ?
+                AND sentences_detailed.id = links.translation_id
+                AND links.sentence_id = ?
+                ''',
+                (lang, source_id)))
+            return translation
+        except StopIteration:
+            pass
+    return ''
 
 
-def get_dictionary_gloss(cursor, lemma, disambiguator, translation_language):
+def get_dictionary_gloss(cursor, lemma, disambiguator, translation_languages):
     lemma = lemma.split('-')[0]
     glosses = set(
         gloss
+        for lang in translation_languages
         for (gloss,) in cursor.execute(
             '''
             SELECT gloss
@@ -187,7 +190,7 @@ def get_dictionary_gloss(cursor, lemma, disambiguator, translation_language):
                 AND disambiguator = ?
                 AND lang = ?
             ''',
-            (lemma, disambiguator, translation_language)))
+            (lemma, disambiguator, lang)))
     return '\n\n'.join(glosses)
 
 
@@ -484,7 +487,7 @@ def recommend_sentence(args):
     lemmas, grammars, graphemes, forward_pronunciations, backward_pronunciations, sounds = get_sentence_details(c, id)
     tatoeba_conn = sqlite3.connect(args.tatoeba_database)
     tc = tatoeba_conn.cursor()
-    translation = get_translation(tc, source_id, args.translation_language)
+    translation = get_translation(tc, source_id, args.translation_languages)
     audio_file = get_audio(tc, text.replace('\t', ''), source_id)
 
     app = qw.QApplication()
@@ -534,7 +537,7 @@ def review(args):
                     locals()[table_kind].clear()
             tatoeba_conn = sqlite3.connect(args.tatoeba_database)
             tc = tatoeba_conn.cursor()
-            translation = get_translation(tc, source_id, args.translation_language)
+            translation = get_translation(tc, source_id, args.translation_languages)
             audio_file = get_audio(tc, text.replace('\t', ''), source_id)
 
             def review_callback(
@@ -620,7 +623,7 @@ def main(argv):
     parser.add_argument('--database', type=str, default='data/japanese_sentences.sqlite')
     parser.add_argument('--tatoeba-database', type=str, default='data/tatoeba.sqlite')
     parser.add_argument('--dictionary-database', type=str, default='data/japanese_dictionary.sqlite')
-    parser.add_argument('--translation-language', type=str, default='eng')
+    parser.add_argument('--translation-languages', type=str, nargs='+', default=['eng'])
     parser.add_argument('--desired-retention', type=float, default=DEFAULT_RETENTION)
     args = parser.parse_args(argv[1:])
 
