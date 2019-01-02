@@ -14,12 +14,14 @@ import PySide2.QtWidgets as qw
 
 from japanese_data import ReviewType
 
-#: Let's say 1 in 20 reviewed sentences containing a forgotten word is okay.
+#: Let's say forgetting 1 in 20 words is okay.
 DEFAULT_RETENTION = 0.95
 
 #: Strength which makes retention drop below DEFAULT RETENTION within a day.
-#: (Assuming 3 details are learned at once [word, to/from pronunciation].)
-MEMORY_STRENGTH_PER_DAY = -3/math.log(DEFAULT_RETENTION)
+MEMORY_STRENGTH_PER_DAY = -1/math.log(DEFAULT_RETENTION)
+
+#: Wait this long (in days) before the first review.
+FIRST_REVIEW_DELAY = 30/(24*60)  # 30 minutes
 
 #: Wait this long (in days) before showing what needs to be relearned.
 RELEARN_GRACE_PERIOD = 5/(24*60)  # 5 minutes
@@ -35,7 +37,7 @@ def refresh(cursor, table, kinds, ids):
                 {kind}memory_strength
                 + {MEMORY_STRENGTH_PER_DAY}*(
                     julianday("now") - last_{kind}refresh) ,
-                {MEMORY_STRENGTH_PER_DAY}),
+                {MEMORY_STRENGTH_PER_DAY*FIRST_REVIEW_DELAY}),
             last_{kind}refresh = julianday("now")
             """ for kind in kinds)}
         WHERE id = ?
@@ -197,19 +199,52 @@ def get_dictionary_gloss(cursor, lemma, disambiguator, translation_languages):
 def get_scheduled_reviews(cursor, desired_retention):
     while True:
         try:
+            query_by_review_type = {
+                review_type:
+                    ' UNION '.join(
+                        f'''
+                            SELECT
+                                sentence_id,
+                                retention
+                            FROM
+                                sentence_{table},
+                                (
+                                    SELECT
+                                        {table}.id,
+                                        ({table}.last_{kind}refresh - julianday('now'))
+                                            /{table}.{kind}memory_strength AS retention
+                                    FROM {table}
+                                    WHERE retention IS NOT NULL
+                                    ORDER BY retention ASC
+                                    LIMIT 1
+                                )
+                            WHERE {table}_id = id
+                            AND retention < :log_retention
+                        '''
+                        for table, kind in review_type.tables_kinds
+                    )
+                for review_type in ReviewType.__members__.values()
+            }
             yield next(cursor.execute(
                 f'''
                 SELECT id, text, source_url, source_id, license_url, creator, pronunciation,
-                    inverse_memory_strength_weighted_last_refresh
-                    - julianday('now')*summed_inverse_memory_strength AS log_retention,
                     review.type
                 FROM sentence, review
                 WHERE sentence.id = sentence_id
-                AND log_retention < ?
-                ORDER BY log_retention ASC
+                AND ({' OR '.join(
+                    f"""
+                    sentence_id IN (
+                        SELECT sentence_id
+                        FROM ({query_by_review_type[review_type]})
+                    )
+                    AND review.type = {review_type.value}
+                    """
+                    for review_type in ReviewType.__members__.values()
+                )})
+                ORDER BY RANDOM()
                 LIMIT 1
                 ''',
-                (math.log(desired_retention),)))
+                dict(log_retention=math.log(desired_retention))))
         except StopIteration:
             break
 
@@ -527,7 +562,7 @@ def review(args):
     def generate_reviews():
         num_reviews = 0
         for (id, text, source_url, source_id, license_url, creator, pronunciation,
-             log_retention, review_type) in get_scheduled_reviews(c, args.desired_retention):
+             review_type) in get_scheduled_reviews(c, args.desired_retention):
             num_reviews += 1
             lemmas, grammars, graphemes, forward_pronunciations, backward_pronunciations, sounds = get_sentence_details(c, id, only_new=False)
             for table_kind in ('lemmas', 'grammars', 'graphemes', 'forward_pronunciations', 'backward_pronunciations', 'sounds'):
@@ -586,14 +621,19 @@ def review(args):
         def refresh_dialog():
             (next_review,), = c.execute(
                 f'''
-                SELECT min(
-                        (inverse_memory_strength_weighted_last_refresh - ?)/
-                        summed_inverse_memory_strength)
-                    - julianday('now')
-                FROM review
-                LIMIT 1
+                SELECT min(next_review) - julianday('now')
+                FROM ({' UNION '.join(
+                    f"""
+                        SELECT
+                            min(last_{kind}refresh - {kind}memory_strength * :log_retention)
+                            AS next_review
+                        FROM {table}
+                    """
+                    for review_type in ReviewType.__members__.values()
+                    for table, kind in review_type.tables_kinds
+                    )})
                 ''',
-                (math.log(args.desired_retention),))
+                dict(log_retention=math.log(args.desired_retention)))
 
             next_review = str(datetime.timedelta(next_review)).split('.')[0]
 
