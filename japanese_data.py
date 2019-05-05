@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+from collections import OrderedDict
 from enum import Enum
 import sqlite3
 import subprocess
@@ -280,6 +281,239 @@ def create_refresh_trigger(cursor, table, kinds):
             ''')
 
 
+def transfer_memory(cursor, old_database):
+    '''
+    To be able to change the database creation process in ways that may affect
+    the sentence decomposition *without* clobbering existing learning progress,
+    it is necessary to somehow transfer the values of the ``last_refresh`` and
+    ``memory_strength`` variables. Ideally, it should be possible to continue
+    learning with the rebuilt database, without noticing any change in the
+    sentences that are scheduled for review.
+
+    To achieve this, the values are aggregated at the sentence level in the old
+    database, then the same sentences are identified in the new database and
+    the sentence-level values are attributed to individual details of those
+    sentences.
+
+    If there were no changes in analysis, the values from the original database
+    should be reconstructed completely.
+
+    To transfer ``last_review``, we can make use of the fact that reviewing a
+    sentence updates this value for all details, so
+    ``sentence.last_review <= detail.last_review``.
+    Hence we can use ``sentence.last_review = min(detail.last_review)`` to
+    aggregate and ``detail.last_review = max(sentence.last_review)``` to
+    disaggregate this value.
+
+    If there are no changes in the decomposition of sentences into details, this
+    reconstruction is lossless, since each detail is assigned the value of the
+    sentence where it was most recently reviewed. For the same reason, the result
+    will still be sensible, as e.g. newly identified details will be assigned
+    the time when they would have been reviewed.
+
+    Transferring ``memory_strength`` is not so simple, since the frequency with
+    which a detail appears may matter. E.g. if a single detail `a` in the old
+    database is recognized as an instance of `A` in a small number of cases in
+    the new database, then `A` may very well have never been reviewed and should
+    correspondingly have a low ``memory_strength``, while that of `a` should
+    remain essentially unchanged.
+
+    To achieve this, the aggregate is computed as
+    ``sentence.memory_strength = sum(detail.memory_strength/detail.frequency)``.
+    That way, the sum over all sentences and the sum over all details are equal,
+    and disaggregating by solving the corresponding system of linear equations
+    also conserves memory strength. However, this requires the frequency to be
+    computed only over sentences that match between the two databases! The
+    precomputed frequency in the database cannot be used.
+    '''
+
+    from time import time
+    previous_time = None
+    previous_line = None
+    def timing():
+        nonlocal previous_time, previous_line
+        from inspect import currentframe as cf
+        new_time = time()
+        new_line = cf().f_back.f_lineno
+        if previous_time is not None:
+            print(f'Took {new_time-previous_time:.3f}s from {previous_line} to {new_line}')
+        previous_time = new_time
+        previous_line = new_line
+
+    timing()
+    cursor.execute(f'ATTACH DATABASE ? AS old_data', (old_database,))
+    timing()
+    detail_union = ' UNION ALL '.join(
+        f'''
+        SELECT
+            {review_type.value} AS review_type,
+            sentence_id,
+            last_{kind}refresh AS last_refresh
+        FROM old_data.sentence_{table}, old_data.{table}
+        WHERE {table}_id = {table}.id
+        '''
+        for review_type in ReviewType
+        for table, kind in review_type.tables_kinds)
+    timing()
+    cursor.execute(
+        '''
+        CREATE TEMPORARY TABLE new_old_sentences (
+            new_id integer,
+            old_id integer,
+            review_type integer,
+            last_refresh real,
+            PRIMARY KEY (new_id, review_type))
+        ''')
+    cursor.execute(
+        f'''
+        INSERT INTO new_old_sentences
+        SELECT
+            s.id AS new_id,
+            o.id AS old_id,
+            u.review_type,
+            min(u.last_refresh) AS last_refresh
+        FROM
+            sentence AS s,
+            old_data.sentence AS o,
+            old_data.review as r,
+            ({detail_union}) AS u
+        WHERE replace(s.text, '\t', '')
+            = replace(o.text, '\t', '')
+        AND o.id = u.sentence_id
+        AND o.id = r.sentence_id
+        AND u.review_type = r.type
+        GROUP BY s.id, o.id, u.review_type
+        ''')
+    timing()
+    for review_type in ReviewType:
+        for table, kind in review_type.tables_kinds:
+            cursor.execute(
+                f'''
+                UPDATE {table}
+                SET
+                    last_{kind}refresh = (
+                        SELECT max(last_refresh)
+                        FROM
+                            temp.new_old_sentences AS no,
+                            sentence_{table} AS st
+                        WHERE no.new_id = st.sentence_id
+                        AND st.{table}_id = {table}.id
+                        AND no.review_type = {review_type.value})
+                ''')
+    timing()
+    num_review_types = len(ReviewType)
+    (sentence_dimension,), = cursor.execute(
+        f'''
+        SELECT max(new_id*{num_review_types}+review_type)+1
+        FROM temp.new_old_sentences
+        ''')
+
+    detail_dimension = {}
+    table_kind_range = {}
+    transfer_matrix = {}
+    for database in ('old_data.', ''):
+        timing()
+        table_kind_dimension = {
+            (table, kind): next(cursor.execute(f'SELECT max(id)+1 FROM {database}{table}'))[0]
+            for review_type in ReviewType
+            for table, kind in review_type.tables_kinds}
+        timing()
+        table_kind_range[database] = OrderedDict()  # need fixed iteration order
+        seen = 0
+        for table_kind, dimension in table_kind_dimension.items():
+            table_kind_range[database][table_kind] = (seen, seen+dimension)
+            seen += dimension
+        detail_dimension[database] = seen
+
+        detail_union = ' UNION ALL '.join(
+            f'''
+            SELECT
+                {review_type.value} AS review_type,
+                sentence_id,
+                {table_kind_range[database][(table, kind)][0]}+{table}.id AS detail_index
+            FROM {database}sentence_{table}, {database}{table}
+            WHERE {table}_id = {table}.id
+            '''
+            for review_type in ReviewType
+            for table, kind in review_type.tables_kinds)
+
+        timing()
+        new_or_old = {'':'new', 'old_data.':'old'}[database]
+        pairings = cursor.execute(
+            f'''
+            SELECT
+                no.new_id*{num_review_types}+no.review_type AS sentence_index,
+                dt.detail_index
+            FROM
+                temp.new_old_sentences AS no,
+                ({detail_union}) AS dt
+            WHERE no.{new_or_old}_id = dt.sentence_id
+            ORDER BY sentence_index, detail_index
+            ''')
+        timing()
+
+        import numpy as np
+        import scipy.sparse as sp
+        import scipy.sparse.linalg
+
+        indptr = []
+        indices = []
+        data = []
+
+        timing()
+        for (sentence_index, detail_index) in pairings:
+            while sentence_index >= len(indptr):
+                indptr.append(len(indices))
+            indices.append(detail_index)
+            data.append(1)
+        indptr.append(len(indices))
+        timing()
+
+        m = sp.csr_matrix(
+            (data, indices, indptr),
+            shape=(sentence_dimension, detail_dimension[database]),
+            dtype=float)
+        m.data /= m.sum(axis=0).flat[m.indices].flat  # normalize by detail frequency
+        transfer_matrix[database] = m
+    timing()
+
+    input_memory_strengths = np.zeros(detail_dimension['old_data.'])
+    detail_union = ' UNION ALL '.join(
+        f'''
+        SELECT
+            {table_kind_range['old_data.'][(table, kind)][0]}+id AS detail_index,
+            {kind}memory_strength AS memory_strength
+        FROM old_data.{table}
+        WHERE {kind}memory_strength IS NOT NULL
+        '''
+        for review_type in ReviewType
+        for table, kind in review_type.tables_kinds)
+    for (detail_index, memory_strength) in cursor.execute(detail_union):
+        input_memory_strengths[detail_index] = memory_strength
+    timing()
+
+    sentence_memory_strengths = transfer_matrix['old_data.'].dot(input_memory_strengths)
+    timing()
+
+    output_vector, istop, itn, normr, normar, norma, conda, normx = sp.linalg.lsmr(transfer_matrix[''], sentence_memory_strengths)
+
+    if istop not in (0, 1, 2, 4, 5):
+        raise RuntimeError(f'Memory transfer equations could not be solved. istop = {istop}')
+    timing()
+
+    for ((table, kind), (start, stop)) in table_kind_range[''].items():
+        output_range = output_vector[start:stop]
+        cursor.executemany(
+            f'''
+            UPDATE {table}
+            SET {kind}memory_strength = ?
+            WHERE id = ?
+            ''',
+            ((memory_strength, i)
+             for (i, memory_strength) in enumerate(output_range)
+             if memory_strength > 0))
+
+
 def build_database(args):
     global conn
     conn = sqlite3.connect(args.database)
@@ -382,6 +616,7 @@ def build_database(args):
                     AND {table}.{kind}memory_strength IS NULL)
                 """ for table, kinds in zip(tables, kindses) for kind in kinds)}
         ''')
+    transfer_memory(c, args.old_database)
     conn.commit()
 
 
@@ -389,7 +624,8 @@ def main(argv):
     parser = argparse.ArgumentParser(
         description='Japanese sentence database')
     parser.add_argument('command', nargs=1, choices={'build-database'})
-    parser.add_argument('--database', type=str, default='data/japanese_sentences.sqlite')
+    parser.add_argument('--database', type=str, default='data/new_japanese_sentences.sqlite')
+    parser.add_argument('--old-database', type=str, default='data/japanese_sentences.sqlite')
     parser.add_argument('--sentence-table', type=str, default='data/japanese_sentences.csv')
     args = parser.parse_args(argv[1:])
 

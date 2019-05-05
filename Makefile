@@ -54,7 +54,7 @@ data/japanese_sentences.csv: data/tatoeba_sentences_jpn.csv data/aozora_sentence
 kuromoji/target/kuromoji-1.0-jar-with-dependencies.jar: kuromoji/src/main/java/com/yorwba/kuromoji/KuromojiTokenize.java kuromoji/pom.xml
 	cd kuromoji; mvn clean compile assembly:single
 
-data/japanese_sentences.sqlite: data/japanese_sentences.csv japanese_data.py kuromoji/target/kuromoji-1.0-jar-with-dependencies.jar
+data/new_japanese_sentences.sqlite: data/japanese_sentences.csv japanese_data.py kuromoji/target/kuromoji-1.0-jar-with-dependencies.jar
 	pipenv run ./japanese_data.py build-database --database=$@ --sentence-table=$<
 
 download-kanjivg:
