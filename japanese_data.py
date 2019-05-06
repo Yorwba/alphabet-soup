@@ -140,9 +140,7 @@ def create_tables():
         '''
         CREATE TABLE IF NOT EXISTS review (
             sentence_id integer REFERENCES sentence(id),
-            type integer,
-            summed_inverse_memory_strength real,
-            inverse_memory_strength_weighted_last_refresh real)
+            type integer)
         ''')
 
 
@@ -250,33 +248,6 @@ def create_refresh_trigger(cursor, table, kinds):
                     SELECT sentence_id
                     FROM sentence_{table}
                     WHERE {table}_id = NEW.id);
-            END
-            ''')
-        cursor.execute(
-            f'''
-            CREATE TRIGGER IF NOT EXISTS {table}_{kind}refresh_review_trigger
-            AFTER UPDATE OF {kind}memory_strength, last_{kind}refresh ON {table}
-            FOR EACH ROW WHEN
-                OLD.{kind}memory_strength IS NOT NULL
-                AND NEW.{kind}memory_strength IS NOT NULL
-            BEGIN
-                UPDATE review SET
-                    summed_inverse_memory_strength =
-                        summed_inverse_memory_strength
-                        - 1/OLD.{kind}memory_strength
-                        + 1/NEW.{kind}memory_strength,
-                    inverse_memory_strength_weighted_last_refresh =
-                        inverse_memory_strength_weighted_last_refresh
-                        - OLD.last_{kind}refresh/OLD.{kind}memory_strength
-                        + NEW.last_{kind}refresh/NEW.{kind}memory_strength
-                WHERE sentence_id IN (
-                    SELECT sentence_id
-                    FROM sentence_{table}
-                    WHERE {table}_id = NEW.id)
-                AND review.type IN ({','.join(
-                    str(review_type.value)
-                    for review_type in ReviewType
-                    if (table, kind) in review_type.tables_kinds)});
             END
             ''')
 
@@ -575,26 +546,12 @@ def build_database(args):
         BEGIN
             INSERT INTO review (
                 sentence_id,
-                type,
-                summed_inverse_memory_strength,
-                inverse_memory_strength_weighted_last_refresh)
+                type)
             VALUES
             {','.join(
                 f"""
                 (NEW.id,
-                {review_type.value},
-                {'+'.join(
-                    f'(SELECT sum(1/{table}.{kind}memory_strength)'
-                    f' FROM {table}, sentence_{table}'
-                    f' WHERE {table}.id = {table}_id'
-                    f' AND NEW.id = sentence_id)'
-                    for table, kind in review_type.tables_kinds)},
-                {'+'.join(
-                    f'(SELECT sum({table}.last_{kind}refresh/{table}.{kind}memory_strength)'
-                    f' FROM {table}, sentence_{table}'
-                    f' WHERE {table}.id = {table}_id'
-                    f' AND NEW.id = sentence_id)'
-                    for table, kind in review_type.tables_kinds)})
+                {review_type.value})
                 """ for review_type in ReviewType)};
         END
         ''')
