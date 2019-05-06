@@ -391,14 +391,16 @@ def transfer_memory(cursor, old_database):
                 f'''
                 UPDATE {table}
                 SET
-                    last_{kind}refresh = (
-                        SELECT max(last_refresh)
-                        FROM
-                            temp.new_old_sentences AS no,
-                            sentence_{table} AS st
-                        WHERE no.new_id = st.sentence_id
-                        AND st.{table}_id = {table}.id
-                        AND no.review_type = {review_type.value})
+                    last_{kind}refresh = max(
+                        ifnull(last_{kind}refresh, 0),
+                        (
+                            SELECT max(last_refresh)
+                            FROM
+                                temp.new_old_sentences AS no,
+                                sentence_{table} AS st
+                            WHERE no.new_id = st.sentence_id
+                            AND st.{table}_id = {table}.id
+                            AND no.review_type = {review_type.value}))
                 ''')
     timing()
     num_review_types = len(ReviewType)
