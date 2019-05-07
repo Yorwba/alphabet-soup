@@ -469,7 +469,11 @@ def transfer_memory(cursor, old_database):
     sentence_memory_strengths = transfer_matrix['old_data.'].dot(input_memory_strengths)
     timing()
 
-    output_vector, istop, itn, normr, normar, norma, conda, normx = sp.linalg.lsmr(transfer_matrix[''], sentence_memory_strengths)
+    output_vector, istop, itn, normr, normar, norma, conda, normx = sp.linalg.lsmr(
+        transfer_matrix[''],
+        sentence_memory_strengths,
+        atol=0,
+        btol=0)
 
     if istop not in (0, 1, 2, 4, 5):
         raise RuntimeError(f'Memory transfer equations could not be solved. istop = {istop}')
