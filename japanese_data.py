@@ -421,6 +421,7 @@ def transfer_memory(cursor, old_database):
                 temp.new_old_sentences AS no,
                 ({detail_union}) AS dt
             WHERE no.{new_or_old}_id = dt.sentence_id
+            AND no.review_type = dt.review_type
             ORDER BY sentence_index, detail_index
             ''')
         timing()
