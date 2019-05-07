@@ -349,8 +349,7 @@ def transfer_memory(cursor, old_database):
             old_data.sentence AS o,
             old_data.review as r,
             ({detail_union}) AS u
-        WHERE s.text
-            = replace(o.text, '\t', '')
+        WHERE s.text = o.text
         AND o.id = u.sentence_id
         AND o.id = r.sentence_id
         AND u.review_type = r.type
