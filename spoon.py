@@ -227,7 +227,7 @@ def get_scheduled_reviews(cursor, desired_retention):
             }
             yield next(cursor.execute(
                 f'''
-                SELECT id, text, source_url, source_id, license_url, creator, pronunciation,
+                SELECT id, segmented_text, source_url, source_id, license_url, creator, pronunciation,
                     review.type
                 FROM sentence, review
                 WHERE sentence.id = sentence_id
@@ -512,7 +512,7 @@ def recommend_sentence(args):
     (id, text, source_url, source_id, license_url, creator, pronunciation,
      payoff_effort_ratio) = next(c.execute(
         f'''
-        SELECT id, text, source_url, source_id, license_url, creator, pronunciation,
+        SELECT id, segmented_text, source_url, source_id, license_url, creator, pronunciation,
             unknown_percentage/unknown_factors as payoff_effort_ratio
         FROM sentence
         WHERE source_database = 'tatoeba'

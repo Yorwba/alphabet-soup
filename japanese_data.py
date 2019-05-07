@@ -55,6 +55,7 @@ def create_tables():
             source_id text,
             license_url text,
             creator text,
+            segmented_text text,
             pronunciation text,
             unknown_factors real,
             unknown_percentage real)
@@ -348,7 +349,7 @@ def transfer_memory(cursor, old_database):
             old_data.sentence AS o,
             old_data.review as r,
             ({detail_union}) AS u
-        WHERE replace(s.text, '\t', '')
+        WHERE s.text
             = replace(o.text, '\t', '')
         AND o.id = u.sentence_id
         AND o.id = r.sentence_id
@@ -496,16 +497,17 @@ def build_database(args):
     for (source_database, source_url, source_id, license_url, creator,
          sentence, segmented, pronounced, based, grammared
          ) in read_sentences(args.sentence_table):
+        unsegmented_text = ''.join(segmented)
         joined_segmentation = '\t'.join(segmented)
         joined_pronunciation = '\t'.join(pronounced)
         c.execute(
             '''
             INSERT OR IGNORE INTO sentence (
-                text, pronunciation, source_database, source_url, source_id,
-                license_url, creator) VALUES (?,?,?,?,?,?,?)
+                text, segmented_text, pronunciation, source_database, source_url,
+                source_id, license_url, creator) VALUES (?,?,?,?,?,?,?,?)
             ''',
-            (joined_segmentation, joined_pronunciation, source_database,
-             source_url, source_id, license_url, creator))
+            (unsegmented_text, joined_segmentation, joined_pronunciation,
+             source_database, source_url, source_id, license_url, creator))
         sentence_id = [next(c.execute('SELECT last_insert_rowid() FROM sentence'))]
         if sentence_id == previous_sentence_id:
             continue
