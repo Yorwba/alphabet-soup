@@ -4,6 +4,7 @@ import argparse
 from collections import defaultdict
 import lxml.etree as etree
 import gzip
+import os
 import sqlite3
 
 
@@ -11,7 +12,7 @@ def create_tables():
     c = conn.cursor()
     c.execute(
         '''
-        CREATE TABLE IF NOT EXISTS entry (
+        CREATE TABLE entry (
             ent_seq integer,
             variant integer,
             lemma text,
@@ -24,7 +25,7 @@ def create_tables():
         ''')
     c.execute(
         '''
-        CREATE TABLE IF NOT EXISTS gloss (
+        CREATE TABLE gloss (
             ent_seq integer,
             variant integer,
             lang text,
@@ -33,7 +34,7 @@ def create_tables():
         ''')
     c.execute(
         '''
-        CREATE TABLE IF NOT EXISTS disambiguator_to_pos (
+        CREATE TABLE disambiguator_to_pos (
             disambiguator text,
             pos text)
         ''')
@@ -243,6 +244,11 @@ def associate_disambiguator_and_pos(args):
 
 
 def convert(args):
+    try:
+        os.remove(args.database)
+    except FileNotFoundError:
+        pass
+
     global conn
     conn = sqlite3.connect(args.database)
 
