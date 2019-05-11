@@ -233,18 +233,20 @@ def update_total_frequency(cursor, table):
 
 def create_refresh_trigger(cursor, table, kinds):
     for kind in kinds:
+        add_or_remove = f'(SELECT 1 - 2 * (NEW.{kind}memory_strength IS NULL))'
         cursor.execute(
             f'''
             CREATE TRIGGER IF NOT EXISTS {table}_{kind}refresh_trigger
             AFTER UPDATE OF {kind}memory_strength ON {table}
             FOR EACH ROW WHEN
-                OLD.{kind}memory_strength IS NULL
-                AND NEW.{kind}memory_strength IS NOT NULL
+                (OLD.{kind}memory_strength IS NULL)
+                <> (NEW.{kind}memory_strength IS NULL)
             BEGIN
                 UPDATE sentence SET
-                    unknown_factors = unknown_factors - 1,
-                    unknown_percentage = unknown_percentage - NEW.frequency/(
-                        SELECT total_{table}_frequency FROM totals)
+                    unknown_factors = unknown_factors - {add_or_remove},
+                    unknown_percentage = unknown_percentage
+                        - {add_or_remove} * NEW.frequency/(
+                            SELECT total_{table}_frequency FROM totals)
                 WHERE sentence.id IN (
                     SELECT sentence_id
                     FROM sentence_{table}
@@ -559,6 +561,18 @@ def build_database(args):
                 (NEW.id,
                 {review_type.value})
                 """ for review_type in ReviewType)};
+        END
+        ''')
+    c.execute(
+        f'''
+        CREATE TRIGGER IF NOT EXISTS sentence_unlearned_trigger
+        AFTER UPDATE OF unknown_factors ON sentence
+        FOR EACH ROW WHEN
+            OLD.unknown_factors = 0
+            AND NEW.unknown_factors > 0
+        BEGIN
+            DELETE FROM review
+            WHERE sentence_id = NEW.id;
         END
         ''')
     c.execute(
