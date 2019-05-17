@@ -143,6 +143,14 @@ def create_tables():
             sentence_id integer REFERENCES sentence(id),
             type integer)
         ''')
+    c.execute(
+        '''
+        CREATE TABLE IF NOT EXISTS log (
+            table_kind text,
+            time_since_last_refresh real,
+            memory_strength real,
+            remembered integer)
+        ''')
 
 
 def read_sentences(filename):
@@ -231,12 +239,12 @@ def update_total_frequency(cursor, table):
         ''')
 
 
-def create_refresh_trigger(cursor, table, kinds):
+def create_learn_trigger(cursor, table, kinds):
     for kind in kinds:
-        add_or_remove = f'(SELECT 1 - 2 * (NEW.{kind}memory_strength IS NULL))'
+        add_or_remove = f'(1 - 2 * (NEW.{kind}memory_strength IS NULL))'
         cursor.execute(
             f'''
-            CREATE TRIGGER IF NOT EXISTS {table}_{kind}refresh_trigger
+            CREATE TRIGGER IF NOT EXISTS {table}_{kind}learn_trigger
             AFTER UPDATE OF {kind}memory_strength ON {table}
             FOR EACH ROW WHEN
                 (OLD.{kind}memory_strength IS NULL)
@@ -251,6 +259,30 @@ def create_refresh_trigger(cursor, table, kinds):
                     SELECT sentence_id
                     FROM sentence_{table}
                     WHERE {table}_id = NEW.id);
+            END
+            ''')
+
+
+def create_log_trigger(cursor, table, kinds):
+    for kind in kinds:
+        cursor.execute(
+            f'''
+            CREATE TRIGGER IF NOT EXISTS {table}_{kind}log_trigger
+            BEFORE UPDATE OF {kind}memory_strength ON {table}
+            FOR EACH ROW WHEN
+                OLD.{kind}memory_strength IS NOT NULL
+                AND NEW.{kind}memory_strength IS NOT NULL
+            BEGIN
+                INSERT INTO log (
+                    table_kind,
+                    time_since_last_refresh,
+                    memory_strength,
+                    remembered)
+                VALUES (
+                    "{table}_{kind}",
+                    julianday("now") - OLD.last_{kind}refresh,
+                    OLD.{kind}memory_strength,
+                    (NEW.{kind}memory_strength > OLD.{kind}memory_strength));
             END
             ''')
 
@@ -493,6 +525,8 @@ def transfer_memory(cursor, old_database):
              for (i, memory_strength) in enumerate(output_range)
              if memory_strength > 0))
 
+    cursor.execute('INSERT INTO log SELECT * from old_data.log')
+
 
 def build_database(args):
     global conn
@@ -543,7 +577,8 @@ def build_database(args):
         update_total_frequency(c, table)
     kindses = (('',), ('',), ('',), ('forward_', 'backward_'), ('',))
     for table, kinds in zip(tables, kindses):
-        create_refresh_trigger(c, table, kinds)
+        create_learn_trigger(c, table, kinds)
+        create_log_trigger(c, table, kinds)
     c.execute(
         f'''
         CREATE TRIGGER IF NOT EXISTS sentence_learned_trigger
