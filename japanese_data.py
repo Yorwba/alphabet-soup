@@ -57,8 +57,7 @@ def create_tables():
             creator text,
             segmented_text text,
             pronunciation text,
-            unknown_factors real,
-            unknown_percentage real)
+            minimum_unknown_frequency real)
         ''')
     c.execute(
         '''
@@ -251,14 +250,29 @@ def create_learn_trigger(cursor, table, kinds):
                 <> (NEW.{kind}memory_strength IS NULL)
             BEGIN
                 UPDATE sentence SET
-                    unknown_factors = unknown_factors - {add_or_remove},
-                    unknown_percentage = unknown_percentage
-                        - {add_or_remove} * NEW.frequency/(
-                            SELECT total_{table}_frequency FROM totals)
+                    minimum_unknown_frequency = (
+                        SELECT min(frequency)
+                        FROM ({' UNION ALL '.join(
+                            f"""
+                            SELECT st.sentence_id, t.frequency
+                            FROM sentence_{table} AS st, {table} AS t
+                            WHERE st.{table}_id = t.id
+                            AND t.{kind}memory_strength IS NULL
+                            AND st.sentence_id = sentence.id
+                            """
+                            for review_type in ReviewType
+                            for table, kind in review_type.tables_kinds)}))
                 WHERE sentence.id IN (
                     SELECT sentence_id
                     FROM sentence_{table}
-                    WHERE {table}_id = NEW.id);
+                    WHERE {table}_id = NEW.id)
+                AND (NEW.{kind}memory_strength IS NOT NULL) IS
+                    (NEW.frequency IS sentence.minimum_unknown_frequency);
+                -- Two cases:
+                -- Learning something new:
+                --   Changes the minimum unknown frequency if it was the minimum
+                -- Unlearning something:
+                --   Changes the minimum unknown frequency if it's less frequent
             END
             ''')
 
@@ -582,10 +596,10 @@ def build_database(args):
     c.execute(
         f'''
         CREATE TRIGGER IF NOT EXISTS sentence_learned_trigger
-        AFTER UPDATE OF unknown_factors ON sentence
+        AFTER UPDATE OF minimum_unknown_frequency ON sentence
         FOR EACH ROW WHEN
-            OLD.unknown_factors > 0
-            AND NEW.unknown_factors = 0
+            OLD.minimum_unknown_frequency IS NOT NULL
+            AND NEW.minimum_unknown_frequency IS NULL
         BEGIN
             INSERT INTO review (
                 sentence_id,
@@ -601,10 +615,10 @@ def build_database(args):
     c.execute(
         f'''
         CREATE TRIGGER IF NOT EXISTS sentence_unlearned_trigger
-        AFTER UPDATE OF unknown_factors ON sentence
+        AFTER UPDATE OF minimum_unknown_frequency ON sentence
         FOR EACH ROW WHEN
-            OLD.unknown_factors = 0
-            AND NEW.unknown_factors > 0
+            OLD.minimum_unknown_frequency IS NULL
+            AND NEW.minimum_unknown_frequency IS NOT NULL
         BEGIN
             DELETE FROM review
             WHERE sentence_id = NEW.id;
@@ -613,22 +627,18 @@ def build_database(args):
     c.execute(
         f'''
         UPDATE sentence SET
-            unknown_factors = {'+'.join(
-                f"""(
-                    SELECT count(*)
-                    FROM sentence_{table}, {table}
-                    WHERE sentence_id = sentence.id
-                    AND {table}_id = {table}.id
-                    AND {table}.{kind}memory_strength IS NULL)
-                """ for table, kinds in zip(tables, kindses) for kind in kinds)},
-            unknown_percentage = {'+'.join(
-                f"""(
-                    SELECT sum({table}.frequency)/total_{table}_frequency
-                    FROM sentence_{table}, {table}, totals
-                    WHERE sentence_id = sentence.id
-                    AND {table}_id = {table}.id
-                    AND {table}.{kind}memory_strength IS NULL)
-                """ for table, kinds in zip(tables, kindses) for kind in kinds)}
+            minimum_unknown_frequency = (
+                SELECT min(frequency)
+                FROM ({' UNION ALL '.join(
+                    f"""
+                    SELECT st.sentence_id, t.frequency
+                    FROM sentence_{table} AS st, {table} AS t
+                    WHERE st.{table}_id = t.id
+                    AND t.{kind}memory_strength IS NULL
+                    AND st.sentence_id = sentence.id
+                    """
+                    for review_type in ReviewType
+                    for table, kind in review_type.tables_kinds)}))
         ''')
     transfer_memory(c, args.old_database)
     conn.commit()
