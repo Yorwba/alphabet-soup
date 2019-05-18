@@ -509,14 +509,24 @@ def recommend_sentence(args):
     c = conn.cursor()
     c.execute('PRAGMA synchronous = off')
     c.execute('ATTACH DATABASE ? AS dictionary', (args.dictionary_database,))
-    (id, text, source_url, source_id, license_url, creator, pronunciation,
-     payoff_effort_ratio) = next(c.execute(
+    (id, text, source_url, source_id, license_url, creator, pronunciation) = next(c.execute(
         f'''
-        SELECT id, segmented_text, source_url, source_id, license_url, creator, pronunciation,
-            unknown_percentage/unknown_factors as payoff_effort_ratio
-        FROM sentence
+        SELECT id, segmented_text, source_url, source_id, license_url, creator, pronunciation
+        FROM sentence as s, (
+            SELECT sentence_id, min(frequency) as min_frequency
+            FROM ({' UNION ALL '.join(
+                f"""
+                SELECT st.sentence_id, t.frequency
+                FROM sentence_{table} AS st, {table} AS t
+                WHERE st.{table}_id = t.id
+                AND t.{kind}memory_strength IS NULL
+                """
+                for review_type in ReviewType
+                for table, kind in review_type.tables_kinds)})
+            GROUP BY sentence_id) AS sf
         WHERE source_database = 'tatoeba'
-        ORDER BY payoff_effort_ratio DESC
+        AND s.id = sf.sentence_id
+        ORDER BY sf.min_frequency DESC
         LIMIT 1
     '''))
     lemmas, grammars, graphemes, forward_pronunciations, backward_pronunciations, sounds = get_sentence_details(c, id)
