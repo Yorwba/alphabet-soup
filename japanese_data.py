@@ -318,11 +318,11 @@ def transfer_memory(cursor, old_database):
     If there were no changes in analysis, the values from the original database
     should be reconstructed completely.
 
-    To transfer ``last_review``, we can make use of the fact that reviewing a
+    To transfer ``last_refresh``, we can make use of the fact that reviewing a
     sentence updates this value for all details, so
-    ``sentence.last_review <= detail.last_review``.
-    Hence we can use ``sentence.last_review = min(detail.last_review)`` to
-    aggregate and ``detail.last_review = max(sentence.last_review)``` to
+    ``sentence.last_refresh <= detail.last_refresh``.
+    Hence we can use ``sentence.last_refresh = min(detail.last_refresh)`` to
+    aggregate and ``detail.last_refresh = max(sentence.last_refresh)``` to
     disaggregate this value.
 
     If there are no changes in the decomposition of sentences into details, this
@@ -331,21 +331,22 @@ def transfer_memory(cursor, old_database):
     will still be sensible, as e.g. newly identified details will be assigned
     the time when they would have been reviewed.
 
-    Transferring ``memory_strength`` is not so simple, since the frequency with
-    which a detail appears may matter. E.g. if a single detail `a` in the old
-    database is recognized as an instance of `A` in a small number of cases in
-    the new database, then `A` may very well have never been reviewed and should
-    correspondingly have a low ``memory_strength``, while that of `a` should
-    remain essentially unchanged.
-
-    To achieve this, the aggregate is computed as
-    ``sentence.memory_strength = sum(detail.memory_strength/detail.frequency)``.
-    That way, the sum over all sentences and the sum over all details are equal,
-    and disaggregating by solving the corresponding system of linear equations
-    also conserves memory strength. However, this requires the frequency to be
-    computed only over sentences that match between the two databases! The
-    precomputed frequency in the database cannot be used.
+    The ``memory_strength`` can be transferred similarly by using the same
+    relationship for the time of the *next* review:
+    A review is scheduled when ``(last_refresh - now)/memory_strength``
+    falls below the desired level ``log(desired_retention)``. Therefore,
+    ``next_refresh = last_refresh - log(desired_retention)*memory_strength``.
+    Then the same min-max technique can be used to obtain a sentence-level value
+    ``sentence.next_refresh = min(detail.next_refresh)``
+    and to disaggregate it into the detail-level again by
+    ``detail.next_refresh = max(sentence.next_refresh)``,
+    from which the new ``memory_strength`` can be computed as
+    ``memory_strength = (last_refresh - next_refresh)/log(desired_retention)``
     '''
+    from spoon import DEFAULT_RETENTION
+    import math
+
+    log_retention = math.log(DEFAULT_RETENTION)
 
     from time import time
     previous_time = None
@@ -368,7 +369,8 @@ def transfer_memory(cursor, old_database):
         SELECT
             {review_type.value} AS review_type,
             sentence_id,
-            last_{kind}refresh AS last_refresh
+            last_{kind}refresh AS last_refresh,
+            last_{kind}refresh - :log_retention*{kind}memory_strength AS next_refresh
         FROM old_data.sentence_{table}, old_data.{table}
         WHERE {table}_id = {table}.id
         '''
@@ -382,6 +384,7 @@ def transfer_memory(cursor, old_database):
             old_id integer,
             review_type integer,
             last_refresh real,
+            next_refresh real,
             PRIMARY KEY (new_id, review_type))
         ''')
     cursor.execute(
@@ -391,7 +394,8 @@ def transfer_memory(cursor, old_database):
             s.id AS new_id,
             o.id AS old_id,
             u.review_type,
-            min(u.last_refresh) AS last_refresh
+            min(u.last_refresh) AS last_refresh,
+            min(u.next_refresh) AS next_refresh
         FROM
             sentence AS s,
             old_data.sentence AS o,
@@ -402,7 +406,8 @@ def transfer_memory(cursor, old_database):
         AND o.id = r.sentence_id
         AND u.review_type = r.type
         GROUP BY s.id, o.id, u.review_type
-        ''')
+        ''',
+        dict(log_retention=log_retention))
     timing()
     for review_type in ReviewType:
         for table, kind in review_type.tables_kinds:
@@ -422,122 +427,27 @@ def transfer_memory(cursor, old_database):
                             AND no.review_type = {review_type.value}))
                 ''')
     timing()
-    num_review_types = len(ReviewType)
-    (sentence_dimension,), = cursor.execute(
-        f'''
-        SELECT max(new_id*{num_review_types}+review_type)+1
-        FROM temp.new_old_sentences
-        ''')
-
-    detail_dimension = {}
-    table_kind_range = {}
-    transfer_matrix = {}
-    for database in ('old_data.', ''):
-        timing()
-        table_kind_dimension = {
-            (table, kind): next(cursor.execute(f'SELECT max(id)+1 FROM {database}{table}'))[0]
-            for review_type in ReviewType
-            for table, kind in review_type.tables_kinds}
-        timing()
-        table_kind_range[database] = OrderedDict()  # need fixed iteration order
-        seen = 0
-        for table_kind, dimension in table_kind_dimension.items():
-            table_kind_range[database][table_kind] = (seen, seen+dimension)
-            seen += dimension
-        detail_dimension[database] = seen
-
-        detail_union = ' UNION ALL '.join(
-            f'''
-            SELECT
-                {review_type.value} AS review_type,
-                sentence_id,
-                {table_kind_range[database][(table, kind)][0]}+{table}.id AS detail_index
-            FROM {database}sentence_{table}, {database}{table}
-            WHERE {table}_id = {table}.id
-            '''
-            for review_type in ReviewType
-            for table, kind in review_type.tables_kinds)
-
-        timing()
-        new_or_old = {'':'new', 'old_data.':'old'}[database]
-        pairings = cursor.execute(
-            f'''
-            SELECT
-                no.new_id*{num_review_types}+no.review_type AS sentence_index,
-                dt.detail_index
-            FROM
-                temp.new_old_sentences AS no,
-                ({detail_union}) AS dt
-            WHERE no.{new_or_old}_id = dt.sentence_id
-            AND no.review_type = dt.review_type
-            ORDER BY sentence_index, detail_index
-            ''')
-        timing()
-
-        import numpy as np
-        import scipy.sparse as sp
-        import scipy.sparse.linalg
-
-        indptr = []
-        indices = []
-        data = []
-
-        timing()
-        for (sentence_index, detail_index) in pairings:
-            while sentence_index >= len(indptr):
-                indptr.append(len(indices))
-            indices.append(detail_index)
-            data.append(1)
-        indptr.append(len(indices))
-        timing()
-
-        m = sp.csr_matrix(
-            (data, indices, indptr),
-            shape=(sentence_dimension, detail_dimension[database]),
-            dtype=float)
-        m.data /= m.sum(axis=0).flat[m.indices].flat  # normalize by detail frequency
-        transfer_matrix[database] = m
+    for review_type in ReviewType:
+        for table, kind in review_type.tables_kinds:
+            cursor.execute(
+                f'''
+                UPDATE {table}
+                SET
+                    {kind}memory_strength = max(
+                        ifnull({kind}memory_strength, 0),
+                        (
+                            SELECT (
+                                {table}.last_{kind}refresh - max(next_refresh)
+                                )/:log_retention
+                            FROM
+                                temp.new_old_sentences AS no,
+                                sentence_{table} AS st
+                            WHERE no.new_id = st.sentence_id
+                            AND st.{table}_id = {table}.id
+                            AND no.review_type = {review_type.value}))
+                ''',
+                dict(log_retention=log_retention))
     timing()
-
-    input_memory_strengths = np.zeros(detail_dimension['old_data.'])
-    detail_union = ' UNION ALL '.join(
-        f'''
-        SELECT
-            {table_kind_range['old_data.'][(table, kind)][0]}+id AS detail_index,
-            {kind}memory_strength AS memory_strength
-        FROM old_data.{table}
-        WHERE {kind}memory_strength IS NOT NULL
-        '''
-        for review_type in ReviewType
-        for table, kind in review_type.tables_kinds)
-    for (detail_index, memory_strength) in cursor.execute(detail_union):
-        input_memory_strengths[detail_index] = memory_strength
-    timing()
-
-    sentence_memory_strengths = transfer_matrix['old_data.'].dot(input_memory_strengths)
-    timing()
-
-    output_vector, istop, itn, normr, normar, norma, conda, normx = sp.linalg.lsmr(
-        transfer_matrix[''],
-        sentence_memory_strengths,
-        atol=0,
-        btol=0)
-
-    if istop not in (0, 1, 2, 4, 5):
-        raise RuntimeError(f'Memory transfer equations could not be solved. istop = {istop}')
-    timing()
-
-    for ((table, kind), (start, stop)) in table_kind_range[''].items():
-        output_range = output_vector[start:stop]
-        cursor.executemany(
-            f'''
-            UPDATE {table}
-            SET {kind}memory_strength = ?
-            WHERE id = ?
-            ''',
-            ((memory_strength, i)
-             for (i, memory_strength) in enumerate(output_range)
-             if memory_strength > 0))
 
     cursor.execute('INSERT INTO log SELECT * from old_data.log')
 
