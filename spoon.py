@@ -636,8 +636,35 @@ def review(args):
 
             next_review = str(datetime.timedelta(next_review)).split('.')[0]
 
+            (possible_sentences,), = c.execute(
+                f'''
+                SELECT count(*)
+                FROM sentence
+                WHERE id in (SELECT sentence_id FROM review)
+                ''')
+
+            learned_tables = dict()
+            for review_type in ReviewType:
+                for table, kind in review_type.tables_kinds:
+                    (learned_count,), = c.execute(
+                        f'''
+                        SELECT count(*)
+                        FROM {table}
+                        WHERE {kind}memory_strength IS NOT NULL
+                        ''')
+                    if table in learned_tables:
+                        learned_tables[table] = max(
+                            learned_tables[table],
+                            learned_count)
+                    else:
+                        learned_tables[table] = learned_count
+
             dialog.setText(
                 f'You reviewed {num_reviews} sentences.\n'
+                f'''You know {", ".join(
+                    f"{count} {table}s"
+                    for table, count in sorted(learned_tables.items()))}.'''
+                f'\nThey cover {possible_sentences} different sentences.\n'
                 f'Next review in {next_review}.')
 
         refresh_dialog()
