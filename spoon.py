@@ -223,7 +223,7 @@ def get_scheduled_reviews(cursor, desired_retention):
                         '''
                         for table, kind in review_type.tables_kinds
                     )
-                for review_type in ReviewType.__members__.values()
+                for review_type in ReviewType
             }
             yield next(cursor.execute(
                 f'''
@@ -239,7 +239,7 @@ def get_scheduled_reviews(cursor, desired_retention):
                     )
                     AND review.type = {review_type.value}
                     """
-                    for review_type in ReviewType.__members__.values()
+                    for review_type in ReviewType
                 )})
                 ORDER BY RANDOM()
                 LIMIT 1
@@ -628,7 +628,7 @@ def review(args):
                             AS next_review
                         FROM {table}
                     """
-                    for review_type in ReviewType.__members__.values()
+                    for review_type in ReviewType
                     for table, kind in review_type.tables_kinds
                     )})
                 ''',
