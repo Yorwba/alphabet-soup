@@ -64,10 +64,13 @@ def read_user_languages():
         '''
         CREATE INDEX idx_language_users ON user_languages(lang)
         ''')
-    c.executemany('INSERT INTO user_languages VALUES (?,?,?,?)',
+    c.executemany('INSERT OR IGNORE INTO user_languages VALUES (?,?,?,?)',
                   ((lang, level, user, details)
+                   for user_list in (
+                           'data/tatoeba/user_languages.csv',
+                           'CKs_native_speaker_list.csv')
                    for lang, level, user, details
-                   in read_tatoeba_tsv('data/tatoeba/user_languages.csv')
+                   in read_tatoeba_tsv(user_list)
                    if lang and user))
     conn.commit()
 
