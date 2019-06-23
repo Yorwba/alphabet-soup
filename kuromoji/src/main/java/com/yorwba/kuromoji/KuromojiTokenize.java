@@ -46,10 +46,18 @@ public class KuromojiTokenize {
         if(accentedMora == 0) {
             return unaccented;
         }
-        if(accentedMora > unaccented.length()) {
-            return unaccented;
+        int accent, morae;
+        for(accent = 0, morae = 0; morae <= accentedMora && accent < unaccented.length(); accent++) {
+            switch(unaccented.charAt(accent)) {
+                case 'ァ': case 'ィ': case 'ゥ': case 'ェ':
+                case 'ォ': case 'ャ': case 'ュ': case 'ョ': continue;
+                default: morae++;
+            }
         }
-        return unaccented.substring(0, accentedMora)
-            + "↘" + unaccented.substring(accentedMora, unaccented.length());
+        if(morae > accentedMora) { // overshot
+            accent--;
+        }
+        return unaccented.substring(0, accent)
+            + "↘" + unaccented.substring(accent, unaccented.length());
     }
 }
