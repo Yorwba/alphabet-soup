@@ -410,6 +410,18 @@ def transfer_memory(cursor, old_database):
         ''',
         dict(log_retention=log_retention))
     timing()
+    cursor.execute(
+        f'''
+        UPDATE sentence
+        SET times_seen = (
+            SELECT o.times_seen
+            FROM
+                old_data.sentence as o,
+                new_old_sentences as no
+            WHERE o.id = no.old_id
+            AND no.new_id = sentence.id)
+        ''')
+    timing()
     for review_type in ReviewType:
         for table, kind in review_type.tables_kinds:
             cursor.execute(
