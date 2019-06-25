@@ -156,6 +156,15 @@ def get_sentence_details(cursor, id, only_new=True, translation_languages=['eng'
         AND sound_id = sound.id
         {'AND memory_strength IS NULL' if only_new else ''}
         '''))
+
+    # Record this sentence as seen
+    cursor.execute(
+        f'''
+        UPDATE sentence
+        SET times_seen = times_seen + 1
+        WHERE id = ?
+        ''',
+        (id,))
     return lemmas, grammars, graphemes, forward_pronunciations, backward_pronunciations, sounds
 
 
@@ -241,7 +250,7 @@ def get_scheduled_reviews(cursor, desired_retention):
                     """
                     for review_type in ReviewType
                 )})
-                ORDER BY RANDOM()
+                ORDER BY times_seen ASC, RANDOM()
                 LIMIT 1
                 ''',
                 dict(log_retention=math.log(desired_retention))))

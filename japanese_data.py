@@ -57,7 +57,8 @@ def create_tables():
             creator text,
             segmented_text text,
             pronunciation text,
-            minimum_unknown_frequency real)
+            minimum_unknown_frequency real,
+            times_seen integer DEFAULT 0)
         ''')
     c.execute(
         '''
