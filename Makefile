@@ -26,7 +26,10 @@ data/tatoeba_sentences_%.csv: data/tatoeba.sqlite tatoeba_data.py
 	pipenv run ./tatoeba_data.py filter-language --database=$< \
 		--language=$* --minimum-level=5 > $@
 
-download-librivox-index data/librivox/index.xml:
+data/librivox/:
+	mkdir -p $@
+
+download-librivox-index data/librivox/index.xml: data/librivox/
 	wget $(foreach i,$(shell seq 0 13), \
 		'https://librivox.org/api/feed/audiobooks?fields={language,url_text_source,url_zip_file}&offset='$(i)'000&limit=1000') \
 		-O data/librivox/index.xml
@@ -48,9 +51,14 @@ data/aozora/list_person_%.csv: data/aozora/list_person_%.zip
 data/aozora/modern_works.urls: aozora_data.py data/aozora/list_person_all_extended_utf8.csv
 	pipenv run ./aozora_data.py modern-works > $@
 
-data/aozora/files: data/aozora/modern_works.urls
-	wget --timestamping --directory-prefix=data/aozora/files/ \
-		--input-file=$<
+data/aozora/librivox_audiobooks.csv: aozora_data.py data/aozora/list_person_all_extended_utf8.csv data/librivox/download_urls.csv
+	pipenv run ./aozora_data.py librivox-audiobooks \
+		--librivox-links=data/librivox/download_urls.csv > $@
+
+data/aozora/files: data/aozora/modern_works.urls data/aozora/librivox_audiobooks.csv
+	cat $^ | cut -f1 | \
+		wget --timestamping --directory-prefix=data/aozora/files/ \
+		--input-file=-
 	touch data/aozora/files
 
 data/aozora_sentences.csv: aozora_data.py data/aozora/files

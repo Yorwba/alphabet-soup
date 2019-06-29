@@ -14,6 +14,7 @@ library_card_url = aozora_header.index('図書カードURL')
 author_birth = aozora_header.index('生年月日')
 author_death = aozora_header.index('没年月日')
 text_url = aozora_header.index('テキストファイルURL')
+html_file_url = aozora_header.index('XHTML/HTMLファイルURL')
 
 
 def modern_works(args):
@@ -26,6 +27,21 @@ def modern_works(args):
              or row[text_url].startswith('https://www.aozora.gr.jp/')))
     for url in modern_files:
         print(url)
+
+
+def librivox_audiobooks(args):
+    html_to_text = {
+        row[html_file_url].replace('http:', 'https:'): row[text_url]
+        for row in aozora_table}
+    for line in args.librivox_links.readlines():
+        line = line.strip()
+        language, aozora_link, archive_link = line.split('\t')
+        if language == 'Japanese':
+            try:
+                text_link = html_to_text[aozora_link.replace('http:', 'https:')]
+                print(text_link, archive_link, sep='\t')
+            except KeyError:
+                pass
 
 
 def sentences_in_paragraph(paragraph):
@@ -78,13 +94,23 @@ def extract_sentences(args):
                         if n.endswith('.txt'):
                             text = z.read(n).decode('shift-jis')
                             lines = text.split('\r\n')
-                            separators = list(i for i, l in enumerate(lines)
-                                              if set(l) == {'-'})
-                            try:
-                                end = lines.index('［＃本文終わり］')
-                            except ValueError:
-                                continue
-                            license = None
+                            separators = [i for i, l in enumerate(lines)
+                                          if set(l) == {'-'}]
+
+                            empty_stretch = 0
+                            max_empty_stretch = 0
+                            max_empty_stretch_index = None
+                            for i, line in enumerate(lines):
+                                if line:
+                                    empty_stretch = 0
+                                else:
+                                    empty_stretch += 1
+                                    if empty_stretch > max_empty_stretch:
+                                        max_empty_stretch = empty_stretch
+                                        max_empty_stretch_index = i
+
+                            end = max_empty_stretch_index + 1
+                            license = 'unknown license, see original text'
                             creator = ''
                             for line in lines[end+1:]:
                                 match = re.match('.*（(.*creativecommons.org/licenses/.*)）', line)
@@ -93,8 +119,7 @@ def extract_sentences(args):
                                 match = re.match('.*者：(.*)$', line)
                                 if match:
                                     creator = match.group(1)
-                            if not license:
-                                continue
+
                             text_start = separators[1]+1
                             text_lines = lines[text_start:end]
                             for line_number, line in enumerate(text_lines):
@@ -116,8 +141,10 @@ def main(argv):
         description='Aozora data file parser')
     parser.add_argument('command', nargs=1, choices={
         'modern-works',
+        'librivox-audiobooks',
         'extract-sentences'})
     parser.add_argument('--aozora-only', type=bool, default=True)
+    parser.add_argument('--librivox-links', type=argparse.FileType('r'), default=None)
     args = parser.parse_args(argv[1:])
 
     globals()[args.command[0].replace('-', '_')](args)
