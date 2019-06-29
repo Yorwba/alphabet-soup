@@ -1,5 +1,5 @@
-.PHONY: all download-tatoeba download-aozora-index \
-	download-kanjivg kanjivg-gifs download-jmdict
+.PHONY: all download-tatoeba download-librivox-index \
+	download-aozora-index download-kanjivg kanjivg-gifs download-jmdict
 
 TATOEBA_FILENAMES := sentences_detailed links tags sentences_with_audio user_languages
 TATOEBA_FILES := $(addprefix data/tatoeba/,$(TATOEBA_FILENAMES))
@@ -25,6 +25,14 @@ data/tatoeba.sqlite: tatoeba_data.py $(TATOEBA_CSVS)
 data/tatoeba_sentences_%.csv: data/tatoeba.sqlite tatoeba_data.py
 	pipenv run ./tatoeba_data.py filter-language --database=$< \
 		--language=$* --minimum-level=5 > $@
+
+download-librivox-index data/librivox/index.xml:
+	wget $(foreach i,$(shell seq 0 13), \
+		'https://librivox.org/api/feed/audiobooks?fields={language,url_text_source,url_zip_file}&offset='$(i)'000&limit=1000') \
+		-O data/librivox/index.xml
+
+data/librivox/download_urls.csv: data/librivox/index.xml
+	pipenv run ./librivox_data.py find-links --index=$< > $@
 
 download-aozora-index:
 	wget --timestamping --directory-prefix=data/aozora/ \

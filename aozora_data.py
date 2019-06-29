@@ -113,7 +113,7 @@ def extract_sentences(args):
 
 def main(argv):
     parser = argparse.ArgumentParser(
-        description='Tatoeba data file parser')
+        description='Aozora data file parser')
     parser.add_argument('command', nargs=1, choices={
         'modern-works',
         'extract-sentences'})
