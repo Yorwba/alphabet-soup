@@ -11,8 +11,13 @@ aozora_header = aozora_list[0]
 aozora_table = aozora_list[1:]
 
 library_card_url = aozora_header.index('図書カードURL')
+author_family_name = aozora_header.index('姓')
+author_given_name = aozora_header.index('名')
+author_role = aozora_header.index('役割フラグ')
 author_birth = aozora_header.index('生年月日')
 author_death = aozora_header.index('没年月日')
+input_by = aozora_header.index('入力者')
+proofread_by = aozora_header.index('校正者')
 text_url = aozora_header.index('テキストファイルURL')
 html_file_url = aozora_header.index('XHTML/HTMLファイルURL')
 
@@ -81,15 +86,18 @@ def sentences_in_paragraph(paragraph):
 def extract_sentences(args):
     import os
     import zipfile
+
+    filename_to_table_row = {
+        row[text_url].split('/')[-1]: row
+        for row in aozora_table}
     filedir = 'data/aozora/files'
     for filename in os.listdir(filedir):
+        table_row = filename_to_table_row[filename]
         filepath = os.path.join(filedir, filename)
         if zipfile.is_zipfile(filepath):
             try:
                 with zipfile.ZipFile(filepath) as z:
-                    url, = set(row[library_card_url]
-                               for row in aozora_table
-                               if row[text_url].endswith(filename))
+                    url = table_row[library_card_url]
                     for n in z.namelist():
                         if n.endswith('.txt'):
                             text = z.read(n).decode('shift-jis')
@@ -110,15 +118,28 @@ def extract_sentences(args):
                                         max_empty_stretch_index = i
 
                             end = max_empty_stretch_index + 1
-                            license = 'unknown license, see original text'
-                            creator = ''
+                            license = None
+                            creators = [
+                                (table_row[author_role], table_row[author_family_name]+table_row[author_given_name]),
+                                ('入力者', table_row[input_by]),
+                                ('校正者', table_row[proofread_by])]
                             for line in lines[end+1:]:
-                                match = re.match('.*（(.*creativecommons.org/licenses/.*)）', line)
+                                # not the correct regex, but good enough:
+                                match = re.match('.*(https?://creativecommons.org/licenses/[!-~]*)', line)
                                 if match:
                                     license = match.group(1)
-                                match = re.match('.*者：(.*)$', line)
+                                match = re.match('このファイルは、インターネットの図書館、青空文庫（https?://www.aozora.gr.jp/?）で作られました。入力、校正、制作にあたったのは、ボランティアの皆さんです。', line)
                                 if match:
-                                    creator = match.group(1)
+                                    # technically not a license
+                                    license = 'https://ja.wikipedia.org/wiki/%E3%83%91%E3%83%96%E3%83%AA%E3%83%83%E3%82%AF%E3%83%89%E3%83%A1%E3%82%A4%E3%83%B3'
+                                match = re.match('(.*者)：(.*)$', line)
+                                if match:
+                                    creators.append(match.group(1, 2))
+
+                            creators = '　'.join(
+                                role+'：'+name
+                                for role, name in creators
+                                if name)
 
                             text_start = separators[1]+1
                             text_lines = lines[text_start:end]
@@ -130,7 +151,7 @@ def extract_sentences(args):
                                         url,
                                         ':'.join((filename, n, str(text_start+line_number), str(character_count))),
                                         license,
-                                        creator,
+                                        creators,
                                         sentence)))
             except zipfile.BadZipFile:
                 pass

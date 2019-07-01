@@ -6,6 +6,7 @@ import os
 import math
 import sqlite3
 import subprocess
+import urllib.parse
 
 import PySide2.QtCore as qc
 import PySide2.QtGui as qg
@@ -339,9 +340,9 @@ def show_sentence_detail_dialog(
     dialog.translation.setFont(big_font)
     dialog.translation.setTextInteractionFlags(qc.Qt.TextSelectableByMouse)
     dialog.attribution =  qw.QLabel(
-        f'Example from <a href="{source_url}">{source_url}</a> '
+        f'Example from <a href="{source_url}">{urllib.parse.unquote(source_url)}</a> '
         f'by {creator}, '
-        f'licensed under <a href="{license_url}">{license_url}</a>')
+        f'licensed under <a href="{license_url}">{urllib.parse.unquote(license_url)}</a>')
     dialog.attribution.setOpenExternalLinks(True)
     dialog.learn_button = qw.QPushButton('Learn')
     dialog.learn_button.setDefault(True)
