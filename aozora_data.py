@@ -40,11 +40,11 @@ def librivox_audiobooks(args):
         for row in aozora_table}
     for line in args.librivox_links.readlines():
         line = line.strip()
-        language, aozora_link, archive_link = line.split('\t')
+        language, aozora_link, archive_id = line.split('\t')
         if language == 'Japanese':
             try:
                 text_link = html_to_text[aozora_link.replace('http:', 'https:')]
-                print(text_link, archive_link, sep='\t')
+                print(text_link, archive_id, sep='\t')
             except KeyError:
                 pass
 

@@ -4,6 +4,7 @@ import argparse
 import lxml.etree
 import re
 
+ARCHIVE_URL_PATTERN = re.compile(r'https?://(?:www\.)?archive\.org/(?:compress|download)//?([^/]+)/')
 
 def find_links(args):
     xml_lines = []
@@ -18,7 +19,9 @@ def find_links(args):
         language = book.find('language').text
         text_source = book.find('url_text_source').text
         zip_file = book.find('url_zip_file').text
-        print(language, text_source, zip_file, sep='\t')
+        if zip_file:
+            archive_id = ARCHIVE_URL_PATTERN.match(zip_file).group(1)
+            print(language, text_source, archive_id, sep='\t')
 
 
 def main(argv):
