@@ -34,8 +34,14 @@ download-librivox-index data/librivox/index.xml: data/librivox/
 		'https://librivox.org/api/feed/audiobooks?fields={language,url_text_source,url_zip_file}&offset='$(i)'000&limit=1000') \
 		-O data/librivox/index.xml
 
-data/librivox/download_urls.csv: data/librivox/index.xml
+data/librivox/download_urls.csv: data/librivox/index.xml librivox_data.py
 	pipenv run ./librivox_data.py find-links --index=$< > $@
+
+data/librivox/audiobooks/: data/aozora/librivox_audiobooks.csv librivox_data.py
+	rm -r $@
+	pipenv run ./librivox_data.py download-audiobooks --file-list=$< \
+		--output-directory=$@
+	touch $@
 
 download-aozora-index:
 	wget --timestamping --directory-prefix=data/aozora/ \
@@ -59,7 +65,7 @@ data/aozora/files: data/aozora/modern_works.urls data/aozora/librivox_audiobooks
 	cat $^ | cut -f1 | \
 		wget --timestamping --directory-prefix=data/aozora/files/ \
 		--input-file=-
-	touch data/aozora/files
+	touch $@
 
 data/aozora_sentences.csv: aozora_data.py data/aozora/files
 	pipenv run ./aozora_data.py extract-sentences > $@

@@ -9,6 +9,8 @@ kanjivg-gif = {git = "https://github.com/Yorwba/kanjivg-gif"}
 lxml = "*"
 numpy = "*"
 scipy = "*"
+ffmpeg-python = "*"
+requests = "*"
 
 [dev-packages]
 
