@@ -154,7 +154,7 @@ def read_dictionary(args):
                                     [f'\n({", ".join(misc)})' if misc else '']
                                     + gloss)
                                    for misc, gloss in g_by_m.items()])
-                            for reading, g_by_m in g_by_rm.items())
+                            for readings, g_by_m in g_by_rm.items())
                         for lang, g_by_rm in g_by_lrm.items()}
                     for kp, g_by_lrm in g_by_kplrm.items()}
 
