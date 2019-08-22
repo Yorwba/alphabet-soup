@@ -124,39 +124,39 @@ def read_dictionary(args):
                                         readings.add(reading)
                                         misc.update(miscellanea)
 
-                # gloss by [(kanji, pos)][lang][{reading}][{misc}]
-                g_by_kplrm = \
-                    defaultdict(
+            # gloss by [(kanji, pos)][lang][{reading}][{misc}]
+            g_by_kplrm = \
+                defaultdict(
+                    lambda: defaultdict(
                         lambda: defaultdict(
                             lambda: defaultdict(
-                                lambda: defaultdict(
-                                    list))))
-                for kp, rm_by_lg in rm_by_kplg.items():
-                    g_by_lrm = g_by_kplrm[kp]
-                    for lang, rm_by_g in rm_by_lg.items():
-                        g_by_rm = g_by_lrm[lang]
-                        for gloss, (readings, misc) in rm_by_g.items():
-                            readings = frozenset(readings)
-                            misc = frozenset(misc)
-                            g_by_rm[readings][misc].append(gloss)
+                                list))))
+            for kp, rm_by_lg in rm_by_kplg.items():
+                g_by_lrm = g_by_kplrm[kp]
+                for lang, rm_by_g in rm_by_lg.items():
+                    g_by_rm = g_by_lrm[lang]
+                    for gloss, (readings, misc) in rm_by_g.items():
+                        readings = frozenset(readings)
+                        misc = frozenset(misc)
+                        g_by_rm[readings][misc].append(gloss)
 
-                # gloss by [(kanji, pos)][lang]
-                g_by_kpl = {
-                    kp: {
-                        lang:
-                        '\n\n'.join(
-                            '\n'.join(
-                                [', '.join(
-                                    f'[{reading}]'
-                                    for reading in readings)
-                                 +':']
-                                + ['\n'.join(
-                                    [f'\n({", ".join(misc)})' if misc else '']
-                                    + gloss)
-                                   for misc, gloss in g_by_m.items()])
-                            for readings, g_by_m in g_by_rm.items())
-                        for lang, g_by_rm in g_by_lrm.items()}
-                    for kp, g_by_lrm in g_by_kplrm.items()}
+            # gloss by [(kanji, pos)][lang]
+            g_by_kpl = {
+                kp: {
+                    lang:
+                    '\n\n'.join(
+                        '\n'.join(
+                            [', '.join(
+                                f'[{reading}]'
+                                for reading in readings)
+                             +':']
+                            + ['\n'.join(
+                                [f'\n({", ".join(misc)})' if misc else '']
+                                + gloss)
+                               for misc, gloss in g_by_m.items()])
+                        for readings, g_by_m in g_by_rm.items())
+                    for lang, g_by_rm in g_by_lrm.items()}
+                for kp, g_by_lrm in g_by_kplrm.items()}
 
             for variant_number, ((kanji, pos), glosses) in enumerate(g_by_kpl.items()):
                 for lang, gloss in glosses.items():
