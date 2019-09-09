@@ -53,7 +53,7 @@ def relearn(cursor, table, kinds, ids):
         {','.join(
             f"""
             {kind}memory_strength = {MEMORY_STRENGTH_PER_DAY*RELEARN_GRACE_PERIOD},
-            last_{kind}refresh = julianday("now")+{RELEARN_GRACE_PERIOD}
+            last_{kind}refresh = julianday("now")
             """ for kind in kinds)}
         WHERE id = ?
         ''',
@@ -225,6 +225,8 @@ def get_scheduled_reviews(cursor, desired_retention):
                                             /{table}.{kind}memory_strength AS retention
                                     FROM {table}
                                     WHERE retention IS NOT NULL
+                                    AND (julianday('now') - {table}.last_{kind}refresh)
+                                        >= {RELEARN_GRACE_PERIOD}
                                     ORDER BY retention ASC
                                     LIMIT 1
                                 )
