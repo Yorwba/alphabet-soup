@@ -50,8 +50,8 @@ def librivox_audiobooks(args):
 
 
 def sentences_in_paragraph(paragraph):
-    left_brackets = '「『（〈'
-    right_brackets = '」』）〉'
+    left_brackets = '「『（〈“'
+    right_brackets = '」』）〉”'
     terminators = '。？！'
     boundary_pattern = '(['+left_brackets+right_brackets+terminators+'])'
     parts = re.split(boundary_pattern, paragraph)
