@@ -68,6 +68,7 @@ def create_tables():
             disambiguator text,
             memory_strength real,
             last_refresh real,
+            last_relearn real,
             frequency real,
             UNIQUE (text, disambiguator))
         ''')
@@ -79,6 +80,7 @@ def create_tables():
             form text UNIQUE,
             memory_strength real,
             last_refresh real,
+            last_relearn real,
             frequency real)
         ''')
     create_link_table(c, 'sentence', 'grammar')
@@ -89,6 +91,7 @@ def create_tables():
             text text UNIQUE,
             memory_strength real,
             last_refresh real,
+            last_relearn real,
             frequency real)
         ''')
     create_link_table(c, 'sentence', 'grapheme')
@@ -100,8 +103,10 @@ def create_tables():
             pronunciation text,
             forward_memory_strength real,
             last_forward_refresh real,
+            last_forward_relearn real,
             backward_memory_strength real,
             last_backward_refresh real,
+            last_backward_relearn real,
             frequency real,
             UNIQUE (word, pronunciation))
         ''')
@@ -113,6 +118,7 @@ def create_tables():
             text text UNIQUE,
             memory_strength real,
             last_refresh real,
+            last_relearn real,
             frequency real)
         ''')
     create_link_table(c, 'sentence', 'sound')
@@ -147,8 +153,9 @@ def create_tables():
         '''
         CREATE TABLE IF NOT EXISTS log (
             table_kind text,
+            frequency real,
             time_since_last_refresh real,
-            memory_strength real,
+            time_since_last_relearn real,
             remembered integer)
         ''')
 
@@ -290,13 +297,15 @@ def create_log_trigger(cursor, table, kinds):
             BEGIN
                 INSERT INTO log (
                     table_kind,
+                    frequency,
                     time_since_last_refresh,
-                    memory_strength,
+                    time_since_last_relearn,
                     remembered)
                 VALUES (
                     "{table}_{kind}",
+                    OLD.frequency,
                     julianday("now") - OLD.last_{kind}refresh,
-                    OLD.{kind}memory_strength,
+                    julianday("now") - OLD.last_{kind}relearn,
                     (NEW.{kind}memory_strength > OLD.{kind}memory_strength));
             END
             ''')
@@ -459,12 +468,24 @@ def transfer_memory(cursor, old_database):
                                 sentence_{table} AS st
                             WHERE no.new_id = st.sentence_id
                             AND st.{table}_id = {table}.id
+                            AND no.review_type = {review_type.value})),
+                    last_{kind}relearn = {table}.last_{kind}refresh + :log_retention * max(
+                        ifnull({kind}memory_strength, 0),
+                        (
+                            SELECT (
+                                {table}.last_{kind}refresh - max(next_refresh)
+                                )/:log_retention
+                            FROM
+                                temp.new_old_sentences AS no,
+                                sentence_{table} AS st
+                            WHERE no.new_id = st.sentence_id
+                            AND st.{table}_id = {table}.id
                             AND no.review_type = {review_type.value}))
                 ''',
                 dict(log_retention=log_retention))
     timing()
 
-    cursor.execute('INSERT INTO log SELECT * from old_data.log')
+    # cursor.execute('INSERT INTO log SELECT * from old_data.log')
 
 
 def build_database(args):

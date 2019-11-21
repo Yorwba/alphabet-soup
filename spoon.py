@@ -39,7 +39,8 @@ def refresh(cursor, table, kinds, ids):
                 + {MEMORY_STRENGTH_PER_DAY}*(
                     julianday("now") - last_{kind}refresh) ,
                 {MEMORY_STRENGTH_PER_DAY*FIRST_REVIEW_DELAY}),
-            last_{kind}refresh = julianday("now")
+            last_{kind}refresh = julianday("now"),
+            last_{kind}relearn = IFNULL(last_{kind}relearn, julianday("now"))
             """ for kind in kinds)}
         WHERE id = ?
         ''',
@@ -53,7 +54,8 @@ def relearn(cursor, table, kinds, ids):
         {','.join(
             f"""
             {kind}memory_strength = {MEMORY_STRENGTH_PER_DAY*RELEARN_GRACE_PERIOD},
-            last_{kind}refresh = julianday("now")
+            last_{kind}refresh = julianday("now"),
+            last_{kind}relearn = julianday("now")
             """ for kind in kinds)}
         WHERE id = ?
         ''',
@@ -108,7 +110,7 @@ def get_sentence_details(cursor, id, only_new=True, translation_languages=['eng'
         FROM lemma, sentence_lemma
         WHERE sentence_id = {id}
         AND lemma_id = lemma.id
-        {'AND memory_strength IS NULL' if only_new else ''}
+        {'AND last_relearn IS NULL' if only_new else ''}
         '''))
     lemmas = [
         (id,
@@ -123,7 +125,7 @@ def get_sentence_details(cursor, id, only_new=True, translation_languages=['eng'
         FROM grammar, sentence_grammar
         WHERE sentence_id = {id}
         AND grammar_id = grammar.id
-        {'AND memory_strength IS NULL' if only_new else ''}
+        {'AND last_relearn IS NULL' if only_new else ''}
         '''))
     graphemes = list(cursor.execute(
         f'''
@@ -131,7 +133,7 @@ def get_sentence_details(cursor, id, only_new=True, translation_languages=['eng'
         FROM grapheme, sentence_grapheme
         WHERE sentence_id = {id}
         AND grapheme_id = grapheme.id
-        {'AND memory_strength IS NULL' if only_new else ''}
+        {'AND last_relearn IS NULL' if only_new else ''}
         '''))
     forward_pronunciations = list(cursor.execute(
         f'''
@@ -139,7 +141,7 @@ def get_sentence_details(cursor, id, only_new=True, translation_languages=['eng'
         FROM pronunciation, sentence_pronunciation
         WHERE sentence_id = {id}
         AND pronunciation_id = pronunciation.id
-        {'AND forward_memory_strength IS NULL' if only_new else ''}
+        {'AND last_forward_relearn IS NULL' if only_new else ''}
         '''))
     backward_pronunciations = list(cursor.execute(
         f'''
@@ -147,7 +149,7 @@ def get_sentence_details(cursor, id, only_new=True, translation_languages=['eng'
         FROM pronunciation, sentence_pronunciation
         WHERE sentence_id = {id}
         AND pronunciation_id = pronunciation.id
-        {'AND backward_memory_strength IS NULL' if only_new else ''}
+        {'AND last_backward_relearn IS NULL' if only_new else ''}
         '''))
     sounds = list(cursor.execute(
         f'''
@@ -155,7 +157,7 @@ def get_sentence_details(cursor, id, only_new=True, translation_languages=['eng'
         FROM sound, sentence_sound
         WHERE sentence_id = {id}
         AND sound_id = sound.id
-        {'AND memory_strength IS NULL' if only_new else ''}
+        {'AND last_relearn IS NULL' if only_new else ''}
         '''))
 
     # Record this sentence as seen
@@ -222,7 +224,7 @@ def get_scheduled_reviews(cursor, desired_retention):
                                     SELECT
                                         {table}.id,
                                         ({table}.last_{kind}refresh - julianday('now'))
-                                            /{table}.{kind}memory_strength AS retention
+                                            /({RELEARN_GRACE_PERIOD} + {table}.last_{kind}refresh - {table}.last_{kind}relearn) AS retention
                                     FROM {table}
                                     WHERE retention IS NOT NULL
                                     AND (julianday('now') - {table}.last_{kind}refresh)
@@ -256,7 +258,7 @@ def get_scheduled_reviews(cursor, desired_retention):
                 ORDER BY times_seen ASC, RANDOM()
                 LIMIT 1
                 ''',
-                dict(log_retention=math.log(desired_retention))))
+                dict(log_retention=MEMORY_STRENGTH_PER_DAY * math.log(desired_retention)*4)))
         except StopIteration:
             break
 
@@ -636,7 +638,7 @@ def review(args):
                 FROM ({' UNION '.join(
                     f"""
                         SELECT
-                            min(last_{kind}refresh - {kind}memory_strength * :log_retention)
+                            min(last_{kind}refresh - ({RELEARN_GRACE_PERIOD} + last_{kind}refresh - last_{kind}relearn) * :log_retention)
                             AS next_review
                         FROM {table}
                     """
@@ -644,7 +646,7 @@ def review(args):
                     for table, kind in review_type.tables_kinds
                     )})
                 ''',
-                dict(log_retention=math.log(args.desired_retention)))
+                dict(log_retention=MEMORY_STRENGTH_PER_DAY * math.log(args.desired_retention)*4))
 
             next_review = str(datetime.timedelta(next_review)).split('.')[0]
 
