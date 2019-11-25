@@ -66,7 +66,6 @@ def create_tables():
             id integer PRIMARY KEY,
             text text,
             disambiguator text,
-            memory_strength real,
             last_refresh real,
             last_relearn real,
             frequency real,
@@ -78,7 +77,6 @@ def create_tables():
         CREATE TABLE IF NOT EXISTS grammar (
             id integer PRIMARY KEY,
             form text UNIQUE,
-            memory_strength real,
             last_refresh real,
             last_relearn real,
             frequency real)
@@ -89,7 +87,6 @@ def create_tables():
         CREATE TABLE IF NOT EXISTS grapheme (
             id integer PRIMARY KEY,
             text text UNIQUE,
-            memory_strength real,
             last_refresh real,
             last_relearn real,
             frequency real)
@@ -101,10 +98,8 @@ def create_tables():
             id integer PRIMARY KEY,
             word text,
             pronunciation text,
-            forward_memory_strength real,
             last_forward_refresh real,
             last_forward_relearn real,
-            backward_memory_strength real,
             last_backward_refresh real,
             last_backward_relearn real,
             frequency real,
@@ -116,7 +111,6 @@ def create_tables():
         CREATE TABLE IF NOT EXISTS sound (
             id integer PRIMARY KEY,
             text text UNIQUE,
-            memory_strength real,
             last_refresh real,
             last_relearn real,
             frequency real)
@@ -248,14 +242,14 @@ def update_total_frequency(cursor, table):
 
 def create_learn_trigger(cursor, table, kinds):
     for kind in kinds:
-        add_or_remove = f'(1 - 2 * (NEW.{kind}memory_strength IS NULL))'
+        add_or_remove = f'(1 - 2 * (NEW.last_{kind}relearn IS NULL))'
         cursor.execute(
             f'''
             CREATE TRIGGER IF NOT EXISTS {table}_{kind}learn_trigger
-            AFTER UPDATE OF {kind}memory_strength ON {table}
+            AFTER UPDATE OF last_{kind}relearn ON {table}
             FOR EACH ROW WHEN
-                (OLD.{kind}memory_strength IS NULL)
-                <> (NEW.{kind}memory_strength IS NULL)
+                (OLD.last_{kind}relearn IS NULL)
+                <> (NEW.last_{kind}relearn IS NULL)
             BEGIN
                 UPDATE sentence SET
                     minimum_unknown_frequency = (
@@ -265,7 +259,7 @@ def create_learn_trigger(cursor, table, kinds):
                             SELECT st.sentence_id, t.frequency
                             FROM sentence_{table} AS st, {table} AS t
                             WHERE st.{table}_id = t.id
-                            AND t.{kind}memory_strength IS NULL
+                            AND t.last_{kind}relearn IS NULL
                             AND st.sentence_id = sentence.id
                             """
                             for review_type in ReviewType
@@ -274,7 +268,7 @@ def create_learn_trigger(cursor, table, kinds):
                     SELECT sentence_id
                     FROM sentence_{table}
                     WHERE {table}_id = NEW.id)
-                AND (NEW.{kind}memory_strength IS NOT NULL) IS
+                AND (NEW.last_{kind}relearn IS NOT NULL) IS
                     (NEW.frequency IS sentence.minimum_unknown_frequency);
                 -- Two cases:
                 -- Learning something new:
@@ -290,10 +284,10 @@ def create_log_trigger(cursor, table, kinds):
         cursor.execute(
             f'''
             CREATE TRIGGER IF NOT EXISTS {table}_{kind}log_trigger
-            BEFORE UPDATE OF {kind}memory_strength ON {table}
+            BEFORE UPDATE OF last_{kind}refresh ON {table}
             FOR EACH ROW WHEN
-                OLD.{kind}memory_strength IS NOT NULL
-                AND NEW.{kind}memory_strength IS NOT NULL
+                OLD.last_{kind}relearn IS NOT NULL
+                AND NEW.last_{kind}relearn IS NOT NULL
             BEGIN
                 INSERT INTO log (
                     table_kind,
@@ -306,7 +300,7 @@ def create_log_trigger(cursor, table, kinds):
                     OLD.frequency,
                     julianday("now") - OLD.last_{kind}refresh,
                     julianday("now") - OLD.last_{kind}relearn,
-                    (NEW.{kind}memory_strength > OLD.{kind}memory_strength));
+                    (NEW.last_{kind}relearn == OLD.last_{kind}relearn));
             END
             ''')
 
@@ -316,7 +310,7 @@ def transfer_memory(cursor, old_database):
     To be able to change the database creation process in ways that may affect
     the sentence decomposition *without* clobbering existing learning progress,
     it is necessary to somehow transfer the values of the ``last_refresh`` and
-    ``memory_strength`` variables. Ideally, it should be possible to continue
+    ``last_relearn`` variables. Ideally, it should be possible to continue
     learning with the rebuilt database, without noticing any change in the
     sentences that are scheduled for review.
 
@@ -341,17 +335,18 @@ def transfer_memory(cursor, old_database):
     will still be sensible, as e.g. newly identified details will be assigned
     the time when they would have been reviewed.
 
-    The ``memory_strength`` can be transferred similarly by using the same
+    The ``last_relearn`` can be transferred similarly by using the same
     relationship for the time of the *next* review:
-    A review is scheduled when ``(last_refresh - now)/memory_strength``
+    (This is fake, but more robust than using ``last_relearn`` directly.)
+    A review is scheduled when ``(last_refresh - now)/(last_refresh - last_relearn)``
     falls below the desired level ``log(desired_retention)``. Therefore,
-    ``next_refresh = last_refresh - log(desired_retention)*memory_strength``.
+    ``next_refresh = last_refresh - log(desired_retention)*(last_refresh - last_relearn)``.
     Then the same min-max technique can be used to obtain a sentence-level value
     ``sentence.next_refresh = min(detail.next_refresh)``
     and to disaggregate it into the detail-level again by
     ``detail.next_refresh = max(sentence.next_refresh)``,
-    from which the new ``memory_strength`` can be computed as
-    ``memory_strength = (last_refresh - next_refresh)/log(desired_retention)``
+    from which the new ``last_relearn`` can be computed as
+    ``last_relearn = last_refresh - (last_refresh - next_refresh)/log(desired_retention)``
     '''
     from spoon import DEFAULT_RETENTION
     import math
@@ -380,7 +375,7 @@ def transfer_memory(cursor, old_database):
             {review_type.value} AS review_type,
             sentence_id,
             last_{kind}refresh AS last_refresh,
-            last_{kind}refresh - :log_retention*{kind}memory_strength AS next_refresh
+            last_{kind}refresh - (last_{kind}refresh - last_{kind}relearn) * :log_retention AS next_refresh
         FROM old_data.sentence_{table}, old_data.{table}
         WHERE {table}_id = {table}.id
         '''
@@ -450,30 +445,17 @@ def transfer_memory(cursor, old_database):
                             AND st.{table}_id = {table}.id
                             AND no.review_type = {review_type.value}))
                 ''')
-    timing()
-    for review_type in ReviewType:
-        for table, kind in review_type.tables_kinds:
             cursor.execute(
                 f'''
                 UPDATE {table}
                 SET
-                    {kind}memory_strength = max(
-                        ifnull({kind}memory_strength, 0),
+                    last_{kind}relearn = min(
+                        ifnull(last_{kind}relearn, 1e100),
                         (
-                            SELECT (
-                                {table}.last_{kind}refresh - max(next_refresh)
-                                )/:log_retention
-                            FROM
-                                temp.new_old_sentences AS no,
-                                sentence_{table} AS st
-                            WHERE no.new_id = st.sentence_id
-                            AND st.{table}_id = {table}.id
-                            AND no.review_type = {review_type.value})),
-                    last_{kind}relearn = {table}.last_{kind}refresh + :log_retention * max(
-                        ifnull({kind}memory_strength, 0),
-                        (
-                            SELECT (
-                                {table}.last_{kind}refresh - max(next_refresh)
+                            SELECT
+                                last_{kind}refresh -
+                                (
+                                    {table}.last_{kind}refresh - max(next_refresh)
                                 )/:log_retention
                             FROM
                                 temp.new_old_sentences AS no,
@@ -580,7 +562,7 @@ def build_database(args):
                     SELECT st.sentence_id, t.frequency
                     FROM sentence_{table} AS st, {table} AS t
                     WHERE st.{table}_id = t.id
-                    AND t.{kind}memory_strength IS NULL
+                    AND t.last_{kind}relearn IS NULL
                     AND st.sentence_id = sentence.id
                     """
                     for review_type in ReviewType

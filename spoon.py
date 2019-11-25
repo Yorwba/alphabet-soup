@@ -34,11 +34,6 @@ def refresh(cursor, table, kinds, ids):
         UPDATE {table} SET
         {','.join(
             f"""
-            {kind}memory_strength = IFNULL(
-                {kind}memory_strength
-                + {MEMORY_STRENGTH_PER_DAY}*(
-                    julianday("now") - last_{kind}refresh) ,
-                {MEMORY_STRENGTH_PER_DAY*FIRST_REVIEW_DELAY}),
             last_{kind}refresh = julianday("now"),
             last_{kind}relearn = IFNULL(last_{kind}relearn, julianday("now"))
             """ for kind in kinds)}
@@ -53,7 +48,6 @@ def relearn(cursor, table, kinds, ids):
         UPDATE {table} SET
         {','.join(
             f"""
-            {kind}memory_strength = {MEMORY_STRENGTH_PER_DAY*RELEARN_GRACE_PERIOD},
             last_{kind}refresh = julianday("now"),
             last_{kind}relearn = julianday("now")
             """ for kind in kinds)}
@@ -664,7 +658,7 @@ def review(args):
                         f'''
                         SELECT count(*)
                         FROM {table}
-                        WHERE {kind}memory_strength IS NOT NULL
+                        WHERE last_{kind}relearn IS NOT NULL
                         ''')
                     if table in learned_tables:
                         learned_tables[table] = max(
