@@ -466,7 +466,7 @@ def transfer_memory(cursor, old_database):
                 dict(log_retention=log_retention))
     timing()
 
-    # cursor.execute('INSERT INTO log SELECT * from old_data.log')
+    cursor.execute('INSERT INTO log SELECT * from old_data.log')
 
 
 def build_database(args):
