@@ -418,11 +418,7 @@ def transfer_memory(cursor, old_database):
         f'''
         UPDATE sentence
         SET last_seen = (
-                SELECT
-                    CASE WHEN o.times_seen = 0
-                    THEN NULL
-                    ELSE o.times_seen + julianday('now') - 1000
-                    END
+                SELECT o.last_seen
                 FROM
                     old_data.sentence as o,
                     new_old_sentences as no
