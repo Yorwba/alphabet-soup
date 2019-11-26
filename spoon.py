@@ -27,6 +27,9 @@ FIRST_REVIEW_DELAY = 30/(24*60)  # 30 minutes
 #: Wait this long (in days) before showing what needs to be relearned.
 RELEARN_GRACE_PERIOD = 5/(24*60)  # 5 minutes
 
+#: A SQLite expression to generate a (mostly) uniform random number in (0, 1)
+UNIFORM_RANDOM = '(((CAST(RANDOM() AS real)/0x' + 'f'*15 + ')+8)/0x10)'
+
 
 def refresh(cursor, table, kinds, ids):
     cursor.executemany(
@@ -158,7 +161,7 @@ def get_sentence_details(cursor, id, only_new=True, translation_languages=['eng'
     cursor.execute(
         f'''
         UPDATE sentence
-        SET times_seen = times_seen + 1
+        SET last_seen = julianday('now')
         WHERE id = ?
         ''',
         (id,))
@@ -249,7 +252,12 @@ def get_scheduled_reviews(cursor, desired_retention):
                     """
                     for review_type in ReviewType
                 )})
-                ORDER BY times_seen ASC, RANDOM()
+                ORDER BY
+                    ifnull(
+                        1. + 1./(julianday('now') - last_seen),
+                        0.
+                    ) + 1./7.*{UNIFORM_RANDOM}
+                    ASC
                 LIMIT 1
                 ''',
                 dict(log_retention=MEMORY_STRENGTH_PER_DAY * math.log(desired_retention)*4)))

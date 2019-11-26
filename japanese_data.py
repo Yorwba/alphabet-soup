@@ -58,7 +58,7 @@ def create_tables():
             segmented_text text,
             pronunciation text,
             minimum_unknown_frequency real,
-            times_seen integer DEFAULT 0 NOT NULL)
+            last_seen real)
         ''')
     c.execute(
         '''
@@ -417,15 +417,18 @@ def transfer_memory(cursor, old_database):
     cursor.execute(
         f'''
         UPDATE sentence
-        SET times_seen = ifnull(
-            (
-                SELECT o.times_seen
+        SET last_seen = (
+                SELECT
+                    CASE WHEN o.times_seen = 0
+                    THEN NULL
+                    ELSE o.times_seen + julianday('now') - 1000
+                    END
                 FROM
                     old_data.sentence as o,
                     new_old_sentences as no
                 WHERE o.id = no.old_id
-                AND no.new_id = sentence.id),
-            0)
+                AND no.new_id = sentence.id
+            )
         ''')
     timing()
     for review_type in ReviewType:
