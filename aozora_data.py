@@ -49,9 +49,14 @@ def librivox_audiobooks(args):
                 pass
 
 
-def sentences_in_paragraph(paragraph):
-    left_brackets = '「『（〈“'
-    right_brackets = '」』）〉”'
+def sentences_in_paragraph(paragraph, ruby):
+    paragraph = paragraph.replace('[', r'［').replace(']', r'］')
+    if ruby:
+        cjk = '⺀-⺙⺛-⻳㇀-㇣㐀-䶵一-鿕豈-舘並-龎🈐-🈒🈔-🈻🉀-🉈𠀀-𪛖𪜀-𫜴𫝀-𫠝𫠠-𬺡丽-𪘀'
+        cjk += '0-9A-Za-z０-９Ａ-Ｚａ-ｚ々〆※×' # not actually CJK, but can have furigana
+        paragraph = re.sub(f'([{cjk}]+)《([^》]+)》', r'[\1|\2]', paragraph)
+    left_brackets = '「『（〈《“'
+    right_brackets = '」』）〉》”'
     terminators = '。？！'
     boundary_pattern = '(['+left_brackets+right_brackets+terminators+'])'
     parts = re.split(boundary_pattern, paragraph)
@@ -97,6 +102,7 @@ def extract_sentences(args):
         if zipfile.is_zipfile(filepath):
             try:
                 with zipfile.ZipFile(filepath) as z:
+                    ruby = 'ruby' in filename
                     url = table_row[library_card_url]
                     for n in z.namelist():
                         if n.endswith('.txt'):
@@ -145,7 +151,7 @@ def extract_sentences(args):
                             text_lines = lines[text_start:end]
                             for line_number, line in enumerate(text_lines):
                                 line = re.sub('［＃[^］]*］', '', line)
-                                for (character_count, sentence) in sentences_in_paragraph(line):
+                                for (character_count, sentence) in sentences_in_paragraph(line, ruby):
                                     print('\t'.join((
                                         'aozora',
                                         url,
