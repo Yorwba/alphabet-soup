@@ -182,6 +182,11 @@ def extract_sentences(args):
                                     lambda m: JIS_X_0213_encode(*map(int,m.groups())),
                                     line
                                 )
+                                line = re.sub(
+                                    r'※［＃[^］]*U\+([0-9a-fA-F]+)([^］0-9a-fA-F][^］]*)?］',
+                                    lambda m: chr(int(m.group(1), 16)),
+                                    line
+                                )
                                 line = re.sub('［＃[^］]*］', '', line)
                                 for (character_count, sentence) in sentences_in_paragraph(line, ruby):
                                     print('\t'.join((
