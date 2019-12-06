@@ -3,6 +3,7 @@
 import argparse
 from collections import OrderedDict
 from enum import Enum
+import re
 import sqlite3
 import subprocess
 
@@ -154,6 +155,9 @@ def create_tables():
         ''')
 
 
+FURIGANA_PATTERN = re.compile(r'\[([^|]+)\|([^\]]+)\]')
+
+
 def read_sentences(filename):
     with open(filename) as f:
         with subprocess.Popen(
@@ -167,6 +171,7 @@ def read_sentences(filename):
                 line = line.rstrip('\n')
                 source_database, source_url, source_id, license_url, creator, sentence = line.split('\t')
                 kuromoji.stdin.write(sentence+'\n')
+                sentence = FURIGANA_PATTERN.sub('\\1', sentence)
                 analyzed = ''
                 segmented = []
                 pronounced = []
