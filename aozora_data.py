@@ -88,6 +88,33 @@ def sentences_in_paragraph(paragraph, ruby):
         i += 2
 
 
+def JIS_X_0213_encode(men, ku, ten):
+    """
+    JIS X 0213 has two planes (men) and each plane consists of a 94x94 grid.
+    This function turns a character identified by its position in the grid into
+    Unicode, via Shift JIS 2004 as an intermediate encoding.
+    """
+    # https://en.wikipedia.org/wiki/Shift_JIS#Shift_JISx0213_and_Shift_JIS-2004
+    if men == 1:
+        if 1 <= ku <= 62:
+            s1 = (ku+257)//2
+        elif 63 <= ku <= 94:
+            s1 = (ku+385)//2
+    elif men == 2:
+        if ku in (1, 3, 4, 5, 8, 12, 13, 14, 15):
+            s1 = (ku+479)//2 - (ku//8) * 3
+        elif 78 <= ku <= 94:
+            s1 = (ku+411)//2
+    if ku & 1 == 1:
+        if 1 <= ten <= 63:
+            s2 = ten + 63
+        elif 64 <= ten <= 94:
+            s2 = ten + 64
+    else:
+        s2 = ten + 158
+    return bytes((s1, s2)).decode('sjis_2004')
+
+
 def extract_sentences(args):
     import os
     import zipfile
@@ -150,6 +177,11 @@ def extract_sentences(args):
                             text_start = separators[1]+1
                             text_lines = lines[text_start:end]
                             for line_number, line in enumerate(text_lines):
+                                line = re.sub(
+                                    '※［＃[^］]*([12])-([0-9]{1,2})-([0-9]{1,2})］',
+                                    lambda m: JIS_X_0213_encode(*map(int,m.groups())),
+                                    line
+                                )
                                 line = re.sub('［＃[^］]*］', '', line)
                                 for (character_count, sentence) in sentences_in_paragraph(line, ruby):
                                     print('\t'.join((
