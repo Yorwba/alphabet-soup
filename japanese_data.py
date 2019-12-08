@@ -24,6 +24,12 @@ ReviewType.PRONUNCIATION_TO_WRITING.tables_kinds = set((
     ('sound', '')))
 
 
+ALL_TABLES_KINDS = sorted(set(
+    tk
+    for review_type in ReviewType
+    for tk in review_type.tables_kinds))
+
+
 def create_link_table(cursor, table1, table2):
     cursor.execute(
         f'''
@@ -59,6 +65,7 @@ def create_tables():
             segmented_text text,
             pronunciation text,
             minimum_unknown_frequency real,
+            id_for_minimum_unknown_frequency integer,
             last_seen real)
         ''')
     c.execute(
@@ -257,18 +264,24 @@ def create_learn_trigger(cursor, table, kinds):
                 <> (NEW.last_{kind}relearn IS NULL)
             BEGIN
                 UPDATE sentence SET
-                    minimum_unknown_frequency = (
-                        SELECT min(frequency)
+                    (minimum_unknown_frequency, id_for_minimum_unknown_frequency) = (
+                        SELECT frequency, id_for_minimum_unknown_frequency
                         FROM ({' UNION ALL '.join(
                             f"""
-                            SELECT st.sentence_id, t.frequency
+                            SELECT
+                                t.frequency,
+                                (
+                                    t.id * {len(ALL_TABLES_KINDS)}
+                                    + {ALL_TABLES_KINDS.index((table, kind))}
+                                ) AS id_for_minimum_unknown_frequency
                             FROM sentence_{table} AS st, {table} AS t
                             WHERE st.{table}_id = t.id
                             AND t.last_{kind}relearn IS NULL
                             AND st.sentence_id = sentence.id
                             """
-                            for review_type in ReviewType
-                            for table, kind in review_type.tables_kinds)}))
+                            for table, kind in ALL_TABLES_KINDS)})
+                        ORDER BY frequency ASC
+                        LIMIT 1)
                 WHERE sentence.id IN (
                     SELECT sentence_id
                     FROM sentence_{table}
@@ -559,18 +572,24 @@ def build_database(args):
     c.execute(
         f'''
         UPDATE sentence SET
-            minimum_unknown_frequency = (
-                SELECT min(frequency)
+            (minimum_unknown_frequency, id_for_minimum_unknown_frequency) = (
+                SELECT frequency, id_for_minimum_unknown_frequency
                 FROM ({' UNION ALL '.join(
                     f"""
-                    SELECT st.sentence_id, t.frequency
+                    SELECT
+                        t.frequency,
+                        (
+                            t.id * {len(ALL_TABLES_KINDS)}
+                            + {ALL_TABLES_KINDS.index((table, kind))}
+                        ) AS id_for_minimum_unknown_frequency
                     FROM sentence_{table} AS st, {table} AS t
                     WHERE st.{table}_id = t.id
                     AND t.last_{kind}relearn IS NULL
                     AND st.sentence_id = sentence.id
                     """
-                    for review_type in ReviewType
-                    for table, kind in review_type.tables_kinds)}))
+                    for table, kind in ALL_TABLES_KINDS)})
+                ORDER BY frequency ASC
+                LIMIT 1)
         ''')
     transfer_memory(c, args.old_database)
     conn.commit()
