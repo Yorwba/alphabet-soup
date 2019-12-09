@@ -6,6 +6,7 @@ from enum import Enum
 import re
 import sqlite3
 import subprocess
+import sys
 
 
 class ReviewType(Enum):
@@ -489,6 +490,24 @@ def transfer_memory(cursor, old_database):
 
 def build_database(args):
     global conn
+    # First check for bugs
+    if sqlite3.sqlite_version_info < (3, 30, 0):
+        has_bug = sqlite3.sqlite_version_info <= (3, 27, 2)
+        if not has_bug:
+            # needs testing
+            conn = sqlite3.connect('')
+            c = conn.cursor()
+            c.execute('create table tta as select 1 as x')
+            c.execute('create table ttb as select 2 as y, 3 as z')
+            c.execute('update ttb set (y, z) = (select x, 4 from (select x from tta where x = 1 union all select 1 as x from tta where x = 1) order by x limit 1)')
+            has_bug = [(1, 4)] != list(c.execute('select * from ttb'))
+
+        if has_bug:
+            print(
+                f'Your version of SQLite has a bug. Try upgrading to version 3.30 or newer.',
+                file=sys.stderr)
+            sys.exit(1)
+
     conn = sqlite3.connect(args.database)
     create_tables()
     c = conn.cursor()
@@ -608,5 +627,4 @@ def main(argv):
 
 
 if __name__ == '__main__':
-    import sys
     main(sys.argv)
