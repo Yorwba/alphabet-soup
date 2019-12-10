@@ -525,15 +525,26 @@ def recommend_sentence(args):
     c = conn.cursor()
     c.execute('PRAGMA synchronous = off')
     c.execute('ATTACH DATABASE ? AS dictionary', (args.dictionary_database,))
+    (id_for_minimum_unknown_frequency, frequency, count) = next(c.execute(
+        f'''
+        SELECT
+            id_for_minimum_unknown_frequency,
+            minimum_unknown_frequency as f,
+            count(*) as c
+        FROM sentence
+        GROUP BY id_for_minimum_unknown_frequency
+        ORDER BY f*c DESC
+        LIMIT 1
+    '''))
     (id, text, source_url, source_id, license_url, creator, pronunciation) = next(c.execute(
         f'''
         SELECT id, segmented_text, source_url, source_id, license_url, creator, pronunciation
         FROM sentence
-        WHERE source_database = 'tatoeba'
-          AND minimum_unknown_frequency IS NOT NULL
-        ORDER BY minimum_unknown_frequency DESC
+        WHERE id_for_minimum_unknown_frequency = ?
+        ORDER BY (source_database = 'tatoeba') DESC
         LIMIT 1
-    '''))
+        ''',
+        (id_for_minimum_unknown_frequency,)))
     lemmas, grammars, graphemes, forward_pronunciations, backward_pronunciations, sounds = get_sentence_details(c, id)
     tatoeba_conn = sqlite3.connect(args.tatoeba_database)
     tc = tatoeba_conn.cursor()
