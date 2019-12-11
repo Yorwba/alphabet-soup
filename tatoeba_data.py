@@ -170,19 +170,23 @@ def filter_language(args):
                 s.added,
                 s.modified
             FROM
-                sentences_detailed AS s,
-                user_languages AS u
+                sentences_detailed AS s
             WHERE
-                s.lang = u.lang
-                AND u.lang = ?
-                AND s.user == u.user
-                AND u.level >= ?
+                s.lang = :lang
+                AND (
+                     (s.id IN (SELECT id FROM tags WHERE name = 'OK'))
+                     OR (
+                        s.user IN (
+                            SELECT user
+                            FROM user_languages
+                            WHERE lang = :lang
+                            AND level >= :level)))
             ''',
-            (args.language, args.minimum_level)):
+            dict(lang=args.language, level=args.minimum_level)):
         id, lang, text, user, added, modified = row
         url = 'https://tatoeba.org/eng/sentences/show/'+str(id)
         license = 'https://creativecommons.org/licenses/by/2.0/'
-        print('\t'.join(('tatoeba', url, str(id), license, user, text)))
+        print('\t'.join(('tatoeba', url, str(id), license, user or 'unknown user', text)))
 
 
 def main(argv):
