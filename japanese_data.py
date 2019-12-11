@@ -610,7 +610,8 @@ def build_database(args):
                 ORDER BY frequency ASC
                 LIMIT 1)
         ''')
-    transfer_memory(c, args.old_database)
+    if args.old_database:
+        transfer_memory(c, args.old_database)
     conn.commit()
 
 
