@@ -95,7 +95,11 @@ kanjivg-gifs: download-kanjivg
 download-jmdict:
 	wget --timestamping --directory-prefix=data/jmdict/ \
 		ftp://ftp.monash.edu.au/pub/nihongo/JMdict.gz
+	wget --timestamping --directory-prefix=data/jmdict/ \
+		http://ftp.monash.edu/pub/nihongo/JMnedict.xml.gz
 
-data/japanese_dictionary.sqlite: data/japanese_sentences.sqlite data/jmdict/JMdict.gz jmdict_data.py
-	pipenv run ./jmdict_data.py convert --jmdict=data/jmdict/JMdict.gz \
+data/japanese_dictionary.sqlite: data/japanese_sentences.sqlite data/jmdict/JMdict.gz data/jmdict/JMnedict.xml.gz jmdict_data.py
+	pipenv run ./jmdict_data.py convert \
+		--jmdict=data/jmdict/JMdict.gz \
+		--jmnedict=data/jmdict/JMnedict.xml.gz \
 		--database=$@ --sentence-database=$<

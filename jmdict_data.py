@@ -40,14 +40,15 @@ def create_tables():
         ''')
 
 
-def read_dictionary(args):
-    with gzip.open(args.jmdict) as f:
+def read_dictionary(jmdict):
+    with gzip.open(jmdict) as f:
         for event, node in etree.iterparse(f, tag='entry'):
             children = node.getchildren()
             ent_seq, = (child.text for child in children if child.tag == 'ent_seq')
             kanji_elements = [child for child in children if child.tag == 'k_ele']
             reading_elements = [child for child in children if child.tag == 'r_ele']
             senses = [child for child in children if child.tag == 'sense']
+            transes = [child for child in children if child.tag == 'trans']
 
             kanjis = [child.text
                      for k_ele in kanji_elements
@@ -123,6 +124,32 @@ def read_dictionary(args):
                                         readings, misc = rm_by_g[glos]
                                         readings.add(reading)
                                         misc.update(miscellanea)
+
+            # Name translations in JMnedict
+            for trans in transes:
+                name_types = set()
+                glosses = defaultdict(list)
+                for child in trans.iterchildren():
+                    if child.tag == 'name_type':
+                        name_types.add(child.text)
+                    elif child.tag == 'trans_det':
+                        language = child.get('{http://www.w3.org/XML/1998/namespace}lang')
+                        if not language:
+                            language = 'eng'
+                        glosses[language].append(child.text)
+                    elif child.tag == 'xref':
+                        pass
+                    else:
+                        import pdb; pdb.set_trace()
+                for kanji, reading in kanji_readings:
+                    for lemma in [kanji, reading]:
+                        for pos in name_types:
+                            rm_by_lg = rm_by_kplg[(lemma, pos)]
+                            for lang, gloss in glosses.items():
+                                rm_by_g = rm_by_lg[lang]
+                                for glos in gloss:
+                                    readings, misc = rm_by_g[glos]
+                                    readings.add(reading)
 
             # gloss by [(kanji, pos)][lang][{reading}][{misc}]
             g_by_kplrm = \
@@ -255,19 +282,20 @@ def convert(args):
     create_tables()
 
     c = conn.cursor()
-    for (ent_seq, variant, kanji, pos, lang, gloss) in read_dictionary(args):
-        c.execute(
-            '''
-            INSERT OR IGNORE INTO entry (ent_seq, variant, lemma, pos)
-            VALUES (?, ?, ?, ?)
-            ''',
-            (ent_seq, variant, kanji, pos))
-        c.execute(
-            '''
-            INSERT OR IGNORE INTO gloss (ent_seq, variant, lang, gloss)
-            VALUES (?, ?, ?, ?)
-            ''',
-            (ent_seq, variant, lang, gloss))
+    for d in (args.jmnedict, args.jmdict):
+        for (ent_seq, variant, kanji, pos, lang, gloss) in read_dictionary(d):
+            c.execute(
+                '''
+                INSERT OR IGNORE INTO entry (ent_seq, variant, lemma, pos)
+                VALUES (?, ?, ?, ?)
+                ''',
+                (ent_seq, variant, kanji, pos))
+            c.execute(
+                '''
+                INSERT OR IGNORE INTO gloss (ent_seq, variant, lang, gloss)
+                VALUES (?, ?, ?, ?)
+                ''',
+                (ent_seq, variant, lang, gloss))
 
     associate_disambiguator_and_pos(args)
 
@@ -279,6 +307,7 @@ def main(argv):
         description='JMdict XML to SQLite converter')
     parser.add_argument('command', nargs=1, choices={'convert'})
     parser.add_argument('--jmdict', type=str, default='data/jmdict/JMdict.gz')
+    parser.add_argument('--jmnedict', type=str, default='data/jmdict/JMnedict.xml.gz')
     parser.add_argument('--database', type=str, default='data/japanese_dictionary.sqlite')
     parser.add_argument('--sentence-database', type=str, default='data/japanese_sentences.sqlite')
     args = parser.parse_args(argv[1:])
