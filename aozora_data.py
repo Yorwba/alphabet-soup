@@ -54,7 +54,7 @@ def sentences_in_paragraph(paragraph, ruby):
     if ruby:
         cjk = '⺀-⺙⺛-⻳㇀-㇣㐀-䶵一-鿕豈-舘並-龎🈐-🈒🈔-🈻🉀-🉈𠀀-𪛖𪜀-𫜴𫝀-𫠝𫠠-𬺡丽-𪘀'
         cjk += '0-9A-Za-z０-９Ａ-Ｚａ-ｚ々〆※×' # not actually CJK, but can have furigana
-        paragraph = re.sub(f'([{cjk}]+)《([^》]+)》', r'[\1|\2]', paragraph)
+        paragraph = re.sub(f'｜?([{cjk}]+)《([^》]+)》', r'[\1|\2]', paragraph)
     left_brackets = '「『（〈《“'
     right_brackets = '」』）〉》”'
     terminators = '。？！'
