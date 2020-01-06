@@ -344,6 +344,8 @@ def transfer_memory(cursor, old_database):
     To transfer ``last_refresh``, we can make use of the fact that reviewing a
     sentence updates this value for all details, so
     ``sentence.last_refresh <= detail.last_refresh``.
+    TODO: This doesn't hold if a sentence was only used to *recommend* a word
+    without refreshing all the words in the sentence.
     Hence we can use ``sentence.last_refresh = min(detail.last_refresh)`` to
     aggregate and ``detail.last_refresh = max(sentence.last_refresh)``` to
     disaggregate this value.
