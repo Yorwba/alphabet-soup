@@ -142,7 +142,7 @@ def get_sentence_details(cursor, id, only_new=True, translation_languages=['eng'
         '''))
     backward_pronunciations = list(cursor.execute(
         f'''
-        SELECT pronunciation.id, pronunciation.pronunciation, pronunciation.word
+        SELECT pronunciation.id, pronunciation.word, pronunciation.pronunciation
         FROM pronunciation, sentence_pronunciation
         WHERE sentence_id = {id}
         AND pronunciation_id = pronunciation.id
@@ -325,7 +325,28 @@ def show_sentence_detail_dialog(
         sounds,
         audio_file,
         callback):
-    graphemes = sorted(graphemes, key=lambda grapheme: text.index(grapheme[1]))
+
+    def position_in(text):
+        def position_in_text(detail):
+            if isinstance(text, tuple):
+                return tuple(
+                    position_in(t)(d)
+                    for t, d in zip(text, detail[1:]))
+            try:
+                return text.index(detail)
+            except ValueError:
+                return len(text)
+        return position_in_text
+
+    lemmas = sorted(lemmas, key=position_in((text,)))
+    graphemes = sorted(graphemes, key=position_in((text,)))
+    forward_pronunciations = sorted(
+        forward_pronunciations,
+        key=position_in((text, pronunciation)))
+    backward_pronunciations = sorted(
+        backward_pronunciations,
+        key=position_in((text, pronunciation)))
+    sounds = sorted(sounds, key=position_in((pronunciation,)))
     dialog = EphemeralDialog()
     possible_fonts = qg.QFontDatabase().families(qg.QFontDatabase.Japanese)
     japanese_fonts = [font for font in possible_fonts if 'jp' in font.lower()]
@@ -376,15 +397,15 @@ def show_sentence_detail_dialog(
         return text, movie, tooltip
 
     def format_template(template):
-        return lambda *args: (template % args, None, None)
+        return lambda *args: (template.format(*args), None, None)
 
     for memory_items, checkboxes, template in (
             (lemmas, lemma_checkboxes, lemma_template),
-            (grammars, grammar_checkboxes, format_template('the form %s')),
+            (grammars, grammar_checkboxes, format_template('the form {}')),
             (graphemes, grapheme_checkboxes, writing_template),
-            (forward_pronunciations, forward_pronunciation_checkboxes, format_template('%s pronounced as %s')),
-            (backward_pronunciations, backward_pronunciation_checkboxes, format_template('%s written as %s')),
-            (sounds, sound_checkboxes, format_template('pronouncing %s'))):
+            (forward_pronunciations, forward_pronunciation_checkboxes, format_template('{} pronounced as {}')),
+            (backward_pronunciations, backward_pronunciation_checkboxes, format_template('{1} written as {0}')),
+            (sounds, sound_checkboxes, format_template('pronouncing {}'))):
         if not memory_items:
             continue
         vlayout = qw.QVBoxLayout()
