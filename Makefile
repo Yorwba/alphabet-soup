@@ -95,7 +95,7 @@ kuromoji/target/kuromoji-1.0-jar-with-dependencies.jar: kuromoji/src/main/java/c
 data/new_japanese_sentences.sqlite: data/japanese_sentences.csv japanese_data.py kuromoji/target/kuromoji-1.0-jar-with-dependencies.jar
 	pipenv run ./japanese_data.py build-database --database=$@ --sentence-table=$<
 
-download-kanjivg:
+data/kanjivg/kanjivg-20160426-main.zip:
 	wget --timestamping --directory-prefix=data/kanjivg/ \
 		https://github.com/KanjiVG/kanjivg/releases/download/r20160426/kanjivg-20160426-main.zip
 
@@ -105,7 +105,7 @@ data/kanjivg/kanji/%.svg: data/kanjivg/kanjivg-20160426-main.zip
 data/kanjivg/kanji/%.gif: data/kanjivg/kanji/%.svg
 	pipenv run kanjivg-gif.py $<
 
-kanjivg-gifs: download-kanjivg
+kanjivg-gifs: data/kanjivg/kanji/26951.svg # any would work here
 	pipenv run find data/kanjivg/kanji -name '*.svg' -exec kanjivg-gif.py '{}' '+'
 
 data/jmdict/JM%:
