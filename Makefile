@@ -15,7 +15,7 @@
 #   along with Alphabet Soup.  If not, see <https://www.gnu.org/licenses/>.
 
 .PHONY: all download-tatoeba download-librivox-index \
-	download-aozora-index download-kanjivg kanjivg-gifs download-jmdict
+	download-aozora-index download-kanjivg kanjivg-gifs
 
 TATOEBA_FILENAMES := sentences_detailed links tags sentences_with_audio user_languages
 TATOEBA_FILES := $(addprefix data/tatoeba/,$(TATOEBA_FILENAMES))
@@ -108,11 +108,9 @@ data/kanjivg/kanji/%.gif: data/kanjivg/kanji/%.svg
 kanjivg-gifs: download-kanjivg
 	pipenv run find data/kanjivg/kanji -name '*.svg' -exec kanjivg-gif.py '{}' '+'
 
-download-jmdict:
+data/jmdict/JM%:
 	wget --timestamping --directory-prefix=data/jmdict/ \
-		ftp://ftp.monash.edu.au/pub/nihongo/JMdict.gz
-	wget --timestamping --directory-prefix=data/jmdict/ \
-		http://ftp.monash.edu/pub/nihongo/JMnedict.xml.gz
+		ftp://ftp.monash.edu.au/pub/nihongo/`basename $@`
 
 data/japanese_dictionary.sqlite: data/japanese_sentences.sqlite data/jmdict/JMdict.gz data/jmdict/JMnedict.xml.gz jmdict_data.py
 	pipenv run ./jmdict_data.py convert \
