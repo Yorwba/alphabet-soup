@@ -22,6 +22,7 @@ import os
 import math
 import sqlite3
 import subprocess
+import sys
 import urllib.parse
 
 import PySide2.QtCore as qc
@@ -561,7 +562,13 @@ def recommend_sentence(args):
     conn = sqlite3.connect(args.database)
     c = conn.cursor()
     c.execute('PRAGMA synchronous = off')
-    c.execute('ATTACH DATABASE ? AS dictionary', (args.dictionary_database,))
+    if os.path.isfile(args.dictionary_database):
+        c.execute('ATTACH DATABASE ? AS dictionary', (args.dictionary_database,))
+    else:
+        print(
+            f'Could not find the dictionary at {args.dictionary_database}',
+            file=sys.stderr)
+        sys.exit(1)
     (id_for_minimum_unknown_frequency, frequency, count) = next(c.execute(
         f'''
         SELECT
@@ -619,7 +626,13 @@ def review(args):
     conn = sqlite3.connect(args.database)
     c = conn.cursor()
     c.execute('PRAGMA synchronous = off')
-    c.execute('ATTACH DATABASE ? AS dictionary', (args.dictionary_database,))
+    if os.path.isfile(args.dictionary_database):
+        c.execute('ATTACH DATABASE ? AS dictionary', (args.dictionary_database,))
+    else:
+        print(
+            f'Could not find the dictionary at {args.dictionary_database}',
+            file=sys.stderr)
+        sys.exit(1)
     app = qw.QApplication()
 
     def generate_reviews():
@@ -761,5 +774,4 @@ def main(argv):
 
 
 if __name__ == '__main__':
-    import sys
     main(sys.argv)
