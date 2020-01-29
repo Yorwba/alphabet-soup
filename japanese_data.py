@@ -19,6 +19,7 @@
 import argparse
 from collections import OrderedDict
 from enum import Enum
+import os
 import re
 import sqlite3
 import subprocess
@@ -628,7 +629,7 @@ def build_database(args):
                 ORDER BY frequency ASC
                 LIMIT 1)
         ''')
-    if args.old_database:
+    if args.old_database and os.path.isfile(args.old_database):
         transfer_memory(c, args.old_database)
     conn.commit()
 
