@@ -26,11 +26,11 @@ all:
 
 download-tatoeba:
 	wget --timestamping --directory-prefix=data/tatoeba/ \
-		$(subst data/tatoeba/,http://downloads.tatoeba.org/exports/,$(TATOEBA_TARBALLS))
+		$(subst data/tatoeba/,https://downloads.tatoeba.org/exports/,$(TATOEBA_TARBALLS))
 
 data/tatoeba/%.tar.bz2:
 	wget --directory-prefix=data/tatoeba/ \
-		http://downloads.tatoeba.org/exports/$*.tar.bz2
+		https://downloads.tatoeba.org/exports/$*.tar.bz2
 
 data/tatoeba/%.csv: data/tatoeba/%.tar.bz2
 	tar --directory=data/tatoeba/ --extract --bzip2 --touch --file=$<
