@@ -41,7 +41,7 @@ make data/japanese_dictionary.sqlite
 
 And the animated stroke order diagrams for all kanji
 ```bash
-make kanjvg-gifs
+make kanjivg-gifs
 ```
 
 ### Usage
