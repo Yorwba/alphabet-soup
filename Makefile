@@ -29,7 +29,7 @@ download-tatoeba:
 		$(subst data/tatoeba/,https://downloads.tatoeba.org/exports/,$(TATOEBA_TARBALLS))
 
 data/tatoeba/%.tar.bz2:
-	wget --directory-prefix=data/tatoeba/ \
+	wget --timestamping --directory-prefix=data/tatoeba/ \
 		https://downloads.tatoeba.org/exports/$*.tar.bz2
 
 data/tatoeba/%.csv: data/tatoeba/%.tar.bz2
@@ -64,7 +64,7 @@ download-aozora-index:
 		https://www.aozora.gr.jp/index_pages/list_person_all_extended_utf8.zip
 
 data/aozora/list_person_%.zip:
-	wget --directory-prefix=data/aozora/ \
+	wget --timestamping --directory-prefix=data/aozora/ \
 		https://www.aozora.gr.jp/index_pages/list_person_$*.zip
 
 data/aozora/list_person_%.csv: data/aozora/list_person_%.zip
