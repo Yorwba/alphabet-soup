@@ -157,6 +157,23 @@ def read_sentences_with_audio():
     conn.commit()
 
 
+def read_transcriptions():
+    c = conn.cursor()
+    c.execute(
+        '''
+        CREATE TABLE IF NOT EXISTS transcriptions (
+            id integer REFERENCES sentences_detailed(id),
+            lang text REFERENCES sentences_detailed(lang),
+            script text,
+            user text REFERENCES sentences_detailed(user),
+            transcription text,
+            PRIMARY KEY (id, script))
+        ''')
+    c.executemany('INSERT OR REPLACE INTO transcriptions VALUES (?,?,?,?,?)',
+                  read_tatoeba_tsv('data/tatoeba/transcriptions.csv'))
+    conn.commit()
+
+
 def build_database(args):
     from os import remove
     try:
@@ -170,6 +187,7 @@ def build_database(args):
     read_links()
     read_tags()
     read_sentences_with_audio()
+    read_transcriptions()
 
 
 def filter_language(args):

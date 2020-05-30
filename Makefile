@@ -17,7 +17,7 @@
 .PHONY: all download-tatoeba download-librivox-index \
 	download-aozora-index download-kanjivg kanjivg-gifs
 
-TATOEBA_FILENAMES := sentences_detailed links tags sentences_with_audio user_languages
+TATOEBA_FILENAMES := sentences_detailed links tags sentences_with_audio user_languages transcriptions
 TATOEBA_FILES := $(addprefix data/tatoeba/,$(TATOEBA_FILENAMES))
 TATOEBA_TARBALLS := $(addsuffix .tar.bz2,$(TATOEBA_FILES))
 TATOEBA_CSVS := $(addsuffix .csv,$(TATOEBA_FILES))
