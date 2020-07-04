@@ -191,6 +191,12 @@ def build_database(args):
 
 
 def filter_language(args):
+    lang_tags = args.language.split('-')
+    lang = lang_tags[0]
+    if len(lang_tags) == 2:
+        script = lang_tags[1]
+    else:
+        script = ''
     global conn
     conn = sqlite3.connect(args.database)
     c = conn.cursor()
@@ -199,7 +205,16 @@ def filter_language(args):
             SELECT
                 s.id,
                 s.lang,
-                s.text,
+                IFNULL(
+                    (
+                        SELECT t.transcription
+                        FROM transcriptions AS t
+                        WHERE t.id = s.id
+                        AND script = :script
+                        AND user != ''
+                    ),
+                    s.text
+                ),
                 s.user,
                 s.added,
                 s.modified
@@ -216,7 +231,10 @@ def filter_language(args):
                             WHERE lang = :lang
                             AND level >= :level)))
             ''',
-            dict(lang=args.language, level=args.minimum_level)):
+            dict(
+                lang=lang,
+                script=script,
+                level=args.minimum_level)):
         id, lang, text, user, added, modified = row
         url = 'https://tatoeba.org/eng/sentences/show/'+str(id)
         license = 'https://creativecommons.org/licenses/by/2.0/'

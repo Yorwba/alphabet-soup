@@ -86,7 +86,7 @@ data/aozora/files: data/aozora/modern_works.urls data/aozora/librivox_audiobooks
 data/aozora_sentences.csv: aozora_data.py data/aozora/files
 	pipenv run ./aozora_data.py extract-sentences > $@
 
-data/japanese_sentences.csv: data/tatoeba_sentences_jpn.csv data/aozora_sentences.csv
+data/japanese_sentences.csv: data/tatoeba_sentences_jpn-Hrkt.csv data/aozora_sentences.csv
 	cat $^ > $@
 
 kuromoji/target/kuromoji-1.0-jar-with-dependencies.jar: kuromoji/src/main/java/com/yorwba/kuromoji/KuromojiTokenize.java kuromoji/pom.xml
