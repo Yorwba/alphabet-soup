@@ -23,6 +23,7 @@ import math
 import sqlite3
 import subprocess
 import sys
+import time
 import urllib.parse
 
 import PySide2.QtCore as qc
@@ -639,6 +640,8 @@ def review(args):
         num_reviews = 0
         for (id, text, source_url, source_id, license_url, creator, pronunciation,
              review_type) in get_scheduled_reviews(c, args.desired_retention):
+            if time.time() - review_start_time > args.review_time_seconds:
+                break
             num_reviews += 1
             lemmas, grammars, graphemes, forward_pronunciations, backward_pronunciations, sounds = get_sentence_details(c, id, only_new=False)
             for table_kind in ('lemmas', 'grammars', 'graphemes', 'forward_pronunciations', 'backward_pronunciations', 'sounds'):
@@ -753,6 +756,7 @@ def review(args):
 
         yield
 
+    review_start_time = time.time()
     review_generator = generate_reviews()
     next(review_generator)
 
@@ -768,6 +772,7 @@ def main(argv):
     parser.add_argument('--dictionary-database', type=str, default='data/japanese_dictionary.sqlite')
     parser.add_argument('--translation-languages', type=str, nargs='+', default=['eng'])
     parser.add_argument('--desired-retention', type=float, default=DEFAULT_RETENTION)
+    parser.add_argument('--review-time-seconds', type=float, default=600.)
     args = parser.parse_args(argv[1:])
 
     globals()[args.command[0].replace('-', '_')](args)
