@@ -232,13 +232,9 @@ def get_scheduled_reviews(cursor, desired_retention):
                 review_type:
                     ' UNION '.join(
                         f'''
-                            SELECT
-                                sentence_id,
-                                utility
-                            FROM
-                                sentence_{table},
-                                (
                                     SELECT
+                                        '{table}' AS t,
+                                        '{kind}' AS k,
                                         {table}.id,
                                         frequency * (
                                             exp(
@@ -256,10 +252,6 @@ def get_scheduled_reviews(cursor, desired_retention):
                                     WHERE {table}.last_{kind}refresh IS NOT NULL
                                     AND (julianday('now') - {table}.last_{kind}refresh)
                                         >= {RELEARN_GRACE_PERIOD}
-                                    ORDER BY utility DESC
-                                    LIMIT 1
-                                )
-                            WHERE {table}_id = id
                         '''
                         for table, kind in review_type.tables_kinds
                     )
@@ -268,27 +260,44 @@ def get_scheduled_reviews(cursor, desired_retention):
             combined_query = ' UNION '.join(
                 f'''
                     SELECT
-                        sentence_id,
-                        utility,
-                        {review_type.value} AS review_type
+                        t,
+                        k,
+                        id,
+                        utility
                     FROM ({query_by_review_type[review_type]})
                 '''
                 for review_type in ReviewType
             )
             prev_time = time.time()
+            scheduled_table, scheduled_kind, scheduled_id = next(cursor.execute(
+                f'''
+                    SELECT
+                        t,
+                        k,
+                        id
+                    FROM ({combined_query})
+                    ORDER BY utility DESC
+                    LIMIT 1
+                '''
+            ))
+            print(f"Took {time.time()-prev_time} seconds to find detail.")
+            scheduled_review_types = ','.join((
+                f'({review_type.value})'
+                for review_type in ReviewType
+                if (scheduled_table, scheduled_kind) in review_type.tables_kinds
+            ))
             scheduled = next(cursor.execute(
                 f'''
                 SELECT id, segmented_text, source_url, source_id, license_url, creator, pronunciation,
-                    review.type
+                    review_type.column1
                 FROM
                     sentence,
-                    ({combined_query}) AS combined_query,
-                    review
-                WHERE sentence.id = review.sentence_id
-                AND sentence.id = combined_query.sentence_id
-                AND review.type = combined_query.review_type
+                    sentence_{scheduled_table} AS st,
+                    (VALUES {scheduled_review_types}) AS review_type
+                WHERE sentence.id = st.sentence_id
+                AND st.{scheduled_table}_id = :scheduled_id
+                AND (sentence.id, review_type.column1) IN review
                 ORDER BY
-                    utility DESC,
                     ifnull(
                         1. + 1./(julianday('now') - last_seen),
                         0.
@@ -296,7 +305,7 @@ def get_scheduled_reviews(cursor, desired_retention):
                     ASC
                 LIMIT 1
                 ''',
-                dict(log_retention=MEMORY_STRENGTH_PER_DAY * math.log(desired_retention)*4)))
+                dict(scheduled_id=scheduled_id)))
             next_time = time.time()
             print(f"Took {next_time-prev_time} seconds to schedule.")
             yield scheduled
