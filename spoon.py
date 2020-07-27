@@ -224,6 +224,8 @@ def get_dictionary_gloss(cursor, lemma, disambiguator, translation_languages):
 
 
 def get_scheduled_reviews(cursor, desired_retention):
+    cursor.connection.create_function('exp', 1, math.exp, deterministic=True)
+    cursor.connection.create_function('log1p', 1, math.log1p, deterministic=True)
     while True:
         try:
             query_by_review_type = {
@@ -232,45 +234,61 @@ def get_scheduled_reviews(cursor, desired_retention):
                         f'''
                             SELECT
                                 sentence_id,
-                                retention
+                                utility
                             FROM
                                 sentence_{table},
                                 (
                                     SELECT
                                         {table}.id,
-                                        ({table}.last_{kind}refresh - julianday('now'))
-                                            /({RELEARN_GRACE_PERIOD} + {table}.last_{kind}refresh - {table}.last_{kind}relearn) AS retention
+                                        frequency * (
+                                            exp(
+                                                -(julianday('now') - {table}.last_{kind}refresh)
+                                                    /({RELEARN_GRACE_PERIOD} + {table}.last_{kind}refresh - {table}.last_{kind}relearn)
+                                            )*(
+                                                log1p(({RELEARN_GRACE_PERIOD} + julianday('now') - {table}.last_{kind}relearn)/{RELEARN_GRACE_PERIOD})
+                                                - log1p(({RELEARN_GRACE_PERIOD} + {table}.last_{kind}refresh - {table}.last_{kind}relearn)/{RELEARN_GRACE_PERIOD})
+                                                - log1p({RELEARN_GRACE_PERIOD}/{RELEARN_GRACE_PERIOD})
+                                            )
+                                            + log1p({RELEARN_GRACE_PERIOD}/{RELEARN_GRACE_PERIOD})
+                                        )
+                                        AS utility
                                     FROM {table}
-                                    WHERE retention IS NOT NULL
+                                    WHERE {table}.last_{kind}refresh IS NOT NULL
                                     AND (julianday('now') - {table}.last_{kind}refresh)
                                         >= {RELEARN_GRACE_PERIOD}
-                                    ORDER BY retention ASC
+                                    ORDER BY utility DESC
                                     LIMIT 1
                                 )
                             WHERE {table}_id = id
-                            AND retention < :log_retention
                         '''
                         for table, kind in review_type.tables_kinds
                     )
                 for review_type in ReviewType
             }
-            yield next(cursor.execute(
+            combined_query = ' UNION '.join(
+                f'''
+                    SELECT
+                        sentence_id,
+                        utility,
+                        {review_type.value} AS review_type
+                    FROM ({query_by_review_type[review_type]})
+                '''
+                for review_type in ReviewType
+            )
+            prev_time = time.time()
+            scheduled = next(cursor.execute(
                 f'''
                 SELECT id, segmented_text, source_url, source_id, license_url, creator, pronunciation,
                     review.type
-                FROM sentence, review
-                WHERE sentence.id = sentence_id
-                AND ({' OR '.join(
-                    f"""
-                    sentence_id IN (
-                        SELECT sentence_id
-                        FROM ({query_by_review_type[review_type]})
-                    )
-                    AND review.type = {review_type.value}
-                    """
-                    for review_type in ReviewType
-                )})
+                FROM
+                    sentence,
+                    ({combined_query}) AS combined_query,
+                    review
+                WHERE sentence.id = review.sentence_id
+                AND sentence.id = combined_query.sentence_id
+                AND review.type = combined_query.review_type
                 ORDER BY
+                    utility DESC,
                     ifnull(
                         1. + 1./(julianday('now') - last_seen),
                         0.
@@ -279,6 +297,9 @@ def get_scheduled_reviews(cursor, desired_retention):
                 LIMIT 1
                 ''',
                 dict(log_retention=MEMORY_STRENGTH_PER_DAY * math.log(desired_retention)*4)))
+            next_time = time.time()
+            print(f"Took {next_time-prev_time} seconds to schedule.")
+            yield scheduled
         except StopIteration:
             break
 
