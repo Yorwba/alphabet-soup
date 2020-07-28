@@ -244,8 +244,8 @@ def get_scheduled_reviews(cursor, desired_retention):
                                                 log1p(({RELEARN_GRACE_PERIOD} + julianday('now') - {table}.last_{kind}relearn)/{RELEARN_GRACE_PERIOD})
                                                 - log1p(({RELEARN_GRACE_PERIOD} + {table}.last_{kind}refresh - {table}.last_{kind}relearn)/{RELEARN_GRACE_PERIOD})
                                                 - log1p({RELEARN_GRACE_PERIOD}/{RELEARN_GRACE_PERIOD})
-                                            )
-                                            + log1p({RELEARN_GRACE_PERIOD}/{RELEARN_GRACE_PERIOD})
+                                            )/log1p({RELEARN_GRACE_PERIOD}/{RELEARN_GRACE_PERIOD})
+                                            + 1
                                         )
                                         AS utility
                                     FROM {table}
@@ -269,18 +269,20 @@ def get_scheduled_reviews(cursor, desired_retention):
                 for review_type in ReviewType
             )
             prev_time = time.time()
-            scheduled_table, scheduled_kind, scheduled_id = next(cursor.execute(
+            scheduled_table, scheduled_kind, scheduled_id, scheduled_utility = next(cursor.execute(
                 f'''
                     SELECT
                         t,
                         k,
-                        id
+                        id,
+                        utility
                     FROM ({combined_query})
                     ORDER BY utility DESC
                     LIMIT 1
                 '''
             ))
             print(f"Took {time.time()-prev_time} seconds to find detail.")
+            print(f"Utility: {scheduled_utility}")
             scheduled_review_types = ','.join((
                 f'({review_type.value})'
                 for review_type in ReviewType
