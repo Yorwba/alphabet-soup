@@ -39,8 +39,11 @@ DEFAULT_RETENTION = 0.95
 #: Strength which makes retention drop below DEFAULT RETENTION within a day.
 MEMORY_STRENGTH_PER_DAY = -1/math.log(DEFAULT_RETENTION)
 
-#: Wait this long (in days) before the first review.
-FIRST_REVIEW_DELAY = 30/(24*60)  # 30 minutes
+#: Time (in days) it takes to forget after seeing something once or relearning.
+BASELINE_MEMORY_STRENGTH = 20
+
+#: Time (in days) after which "the test" for determining utility is taken.
+TEST_DELAY = 20
 
 #: Wait this long (in days) before showing what needs to be relearned.
 RELEARN_GRACE_PERIOD = 5/(24*60)  # 5 minutes
@@ -225,7 +228,6 @@ def get_dictionary_gloss(cursor, lemma, disambiguator, translation_languages):
 
 def get_scheduled_reviews(cursor, desired_retention):
     cursor.connection.create_function('exp', 1, math.exp, deterministic=True)
-    cursor.connection.create_function('log1p', 1, math.log1p, deterministic=True)
     while True:
         try:
             query_by_review_type = {
@@ -239,12 +241,14 @@ def get_scheduled_reviews(cursor, desired_retention):
                                         frequency * (
                                             exp(
                                                 -(julianday('now') - {table}.last_{kind}refresh)
-                                                    /({RELEARN_GRACE_PERIOD} + {table}.last_{kind}refresh - {table}.last_{kind}relearn)
+                                                    /({BASELINE_MEMORY_STRENGTH} + {table}.last_{kind}refresh - {table}.last_{kind}relearn)
                                             )*(
-                                                log1p(({RELEARN_GRACE_PERIOD} + julianday('now') - {table}.last_{kind}relearn)/{RELEARN_GRACE_PERIOD})
-                                                - log1p(({RELEARN_GRACE_PERIOD} + {table}.last_{kind}refresh - {table}.last_{kind}relearn)/{RELEARN_GRACE_PERIOD})
-                                                - log1p({RELEARN_GRACE_PERIOD}/{RELEARN_GRACE_PERIOD})
-                                            )/log1p({RELEARN_GRACE_PERIOD}/{RELEARN_GRACE_PERIOD})
+                                                (
+                                                    exp(-{TEST_DELAY}/({BASELINE_MEMORY_STRENGTH} +  julianday('now') - {table}.last_{kind}relearn))
+                                                    - exp(-{TEST_DELAY}/({BASELINE_MEMORY_STRENGTH} + {table}.last_{kind}refresh - {table}.last_{kind}relearn))
+                                                )/exp(-{TEST_DELAY}/{BASELINE_MEMORY_STRENGTH})
+                                                - 1
+                                            )
                                             + 1
                                         )
                                         AS utility
