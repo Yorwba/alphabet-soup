@@ -239,6 +239,8 @@ def get_scheduled_reviews(cursor, desired_retention):
                                         '{kind}' AS k,
                                         {table}.id,
                                         frequency * (
+                                            1 - frequency/total_{table}_frequency
+                                        ) * (
                                             exp(
                                                 -(julianday('now') - {table}.last_{kind}refresh)
                                                     /({BASELINE_MEMORY_STRENGTH} + {table}.last_{kind}refresh - {table}.last_{kind}relearn)
@@ -252,7 +254,7 @@ def get_scheduled_reviews(cursor, desired_retention):
                                             + 1
                                         )
                                         AS utility
-                                    FROM {table}
+                                    FROM {table}, totals
                                     WHERE {table}.last_{kind}refresh IS NOT NULL
                                     AND (julianday('now') - {table}.last_{kind}refresh)
                                         >= {RELEARN_GRACE_PERIOD}
