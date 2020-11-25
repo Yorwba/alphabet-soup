@@ -261,6 +261,13 @@ def create_links(cursor, table1, table2, fields1, fields2, values1, values2):
         (v1 + v2 for v1, v2 in product(values1, values2)))
 
 
+def count_or_create_and_link(cursor, table1, table2, fields1, fields2, values1, values2):
+    values1 = list(values1)
+    values2 = list(values2)
+    count_or_create(cursor, table2, fields2, values2)
+    create_links(cursor, table1, table2, fields1, fields2, values1, values2)
+
+
 def update_total_frequency(cursor, table):
     cursor.execute(
         f'''
@@ -549,26 +556,30 @@ def build_database(args):
         if sentence_id == previous_sentence_id:
             continue
         previous_sentence_id = sentence_id
-        count_or_create(c, 'lemma', ('text', 'disambiguator'),
-                        based)
-        create_links(c, 'sentence', 'lemma', ('id',), ('text', 'disambiguator'),
-                     sentence_id, based)
-        count_or_create(c, 'grammar', ('form',),
-                        [(g,) for g in grammared])
-        create_links(c, 'sentence', 'grammar', ('id',), ('form',),
-                     sentence_id, [(g,) for g in grammared])
-        count_or_create(c, 'grapheme', ('text',),
-                        sentence)
-        create_links(c, 'sentence', 'grapheme', ('id',), ('text',),
-                     sentence_id, [(w,) for w in sentence])
-        count_or_create(c, 'pronunciation', ('word', 'pronunciation'),
-                        list(zip(segmented, pronounced)))
-        create_links(c, 'sentence', 'pronunciation', ('id',), ('word', 'pronunciation'),
-                     sentence_id, list(zip(segmented, pronounced)))
-        count_or_create(c, 'sound', ('text',),
-                        [(c,) for p in pronounced for c in p])
-        create_links(c, 'sentence', 'sound', ('id',), ('text',),
-                     sentence_id, [(c,) for p in pronounced for c in p])
+        count_or_create_and_link(
+            c,
+            'sentence', 'lemma',
+            ('id',), ('text', 'disambiguator'),
+            sentence_id, based)
+        count_or_create_and_link(
+            c,
+            'sentence', 'grammar',
+            ('id',), ('form',),
+            sentence_id, [(g,) for g in grammared])
+        count_or_create_and_link(
+            c,
+            'sentence', 'grapheme',
+            ('id',), ('text',),
+            sentence_id, [(w,) for w in sentence])
+        count_or_create_and_link(
+            c, 'sentence', 'pronunciation',
+            ('id',), ('word', 'pronunciation'),
+            sentence_id, list(zip(segmented, pronounced)))
+        count_or_create_and_link(
+            c,
+            'sentence', 'sound',
+            ('id',), ('text',),
+            sentence_id, [(c,) for p in pronounced for c in p])
     tables = ('lemma', 'grammar', 'grapheme', 'pronunciation', 'sound')
     for table in tables:
         update_total_frequency(c, table)
