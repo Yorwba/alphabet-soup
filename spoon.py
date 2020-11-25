@@ -302,7 +302,7 @@ def get_scheduled_reviews(cursor, desired_retention):
                     (VALUES {scheduled_review_types}) AS review_type
                 WHERE sentence.id = st.sentence_id
                 AND st.{scheduled_table}_id = :scheduled_id
-                AND (sentence.id, review_type.column1) IN review
+                AND sentence.minimum_unknown_frequency IS NULL
                 ORDER BY
                     ifnull(
                         1. + 1./(julianday('now') - last_seen),
