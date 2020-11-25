@@ -264,7 +264,7 @@ def create_links(cursor, table1, table2, fields1, fields2, values1, values2):
 def count_or_create_and_link(cursor, table1, table2, fields1, fields2, values1, values2):
     values1 = list(values1)
     values2 = list(values2)
-    count_or_create(cursor, table2, fields2, values2)
+    count_or_create(cursor, table2, fields2, set(values2))
     create_links(cursor, table1, table2, fields1, fields2, values1, values2)
 
 
