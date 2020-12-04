@@ -239,7 +239,7 @@ def get_scheduled_reviews(cursor, desired_retention):
                                         '{kind}' AS k,
                                         {table}.id,
                                         frequency * (
-                                            1 - frequency/total_{table}_frequency
+                                            1 - frequency/total_sentences
                                         ) * (
                                             exp(
                                                 -(julianday('now') - {table}.last_{kind}refresh)

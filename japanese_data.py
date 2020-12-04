@@ -146,6 +146,7 @@ def create_tables():
         '''
         CREATE TABLE IF NOT EXISTS totals (
             id integer PRIMARY KEY CHECK (id = 0),
+            total_sentences integer,
             total_lemma_frequency real,
             total_grammar_frequency real,
             total_grapheme_frequency real,
@@ -583,6 +584,12 @@ def build_database(args):
     tables = ('lemma', 'grammar', 'grapheme', 'pronunciation', 'sound')
     for table in tables:
         update_total_frequency(c, table)
+    c.execute(
+        f'''
+        UPDATE totals
+        SET total_sentences = (SELECT count(*) FROM sentence)
+        WHERE id = 0
+        ''')
     kindses = (('',), ('',), ('',), ('forward_', 'backward_'), ('',))
     for table, kinds in zip(tables, kindses):
         create_learn_trigger(c, table, kinds)
