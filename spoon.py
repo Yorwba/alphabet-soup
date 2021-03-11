@@ -228,6 +228,7 @@ def get_dictionary_gloss(cursor, lemma, disambiguator, translation_languages):
 
 def get_scheduled_reviews(cursor, desired_retention):
     cursor.connection.create_function('exp', 1, math.exp, deterministic=True)
+    cursor.connection.create_function('pow', 2, math.pow, deterministic=True)
     while True:
         try:
             query_by_review_type = {
@@ -238,8 +239,12 @@ def get_scheduled_reviews(cursor, desired_retention):
                                         '{table}' AS t,
                                         '{kind}' AS k,
                                         {table}.id,
-                                        frequency * (
-                                            1 - frequency/total_sentences
+                                        frequency * pow(
+                                            max(
+                                                0.0,
+                                                1 - frequency/total_sentences
+                                            ),
+                                            25
                                         ) * (
                                             exp(
                                                 -(julianday('now') - {table}.last_{kind}refresh)
