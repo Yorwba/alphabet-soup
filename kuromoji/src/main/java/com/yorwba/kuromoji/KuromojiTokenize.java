@@ -20,8 +20,9 @@ package com.yorwba.kuromoji;
 
 import com.atilika.kuromoji.unidic.kanaaccent.Token;
 import com.atilika.kuromoji.unidic.kanaaccent.Tokenizer;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.io.BufferedReader;
@@ -33,8 +34,8 @@ public class KuromojiTokenize {
 
     private static final Tokenizer tokenizer = new Tokenizer();
 
-    private static HashMap<String, List<Token>> multiNBest(String text, int n) {
-        HashMap<String, List<Token>> multiTokens = new HashMap<String, List<Token>>();
+    private static LinkedHashMap<String, List<Token>> multiNBest(String text, int n) {
+        LinkedHashMap<String, List<Token>> multiTokens = new LinkedHashMap<String, List<Token>>();
         for(List<?> tokenBases : tokenizer.multiTokenizeNBest(text, 100)) {
             List<Token> tokens = (List<Token>) tokenBases;
             String pronunciation = "";
@@ -42,7 +43,7 @@ public class KuromojiTokenize {
                 pronunciation += token.getPronunciation();
             }
             if(multiTokens.get(pronunciation) == null) {
-                // this tokenization is best for the pronunciation
+                // this tokenization is the first and best for the pronunciation
                 multiTokens.put(pronunciation, tokens);
             }
         }
@@ -55,13 +56,13 @@ public class KuromojiTokenize {
         if(kanji.equals(furigana)) {
             return tokenizer.tokenize(kanji);
         }
-        HashMap<String, List<Token>> kanjiNBest = multiNBest(kanji, 100);
+        LinkedHashMap<String, List<Token>> kanjiNBest = multiNBest(kanji, 100);
 
-        HashMap<String, List<Token>> furiganaNBest = multiNBest(furigana, 100);
-        Set<String> commonPronunciations = kanjiNBest.keySet();
-        commonPronunciations.retainAll(furiganaNBest.keySet());
-        for(String pronunciation : commonPronunciations) {
-            return kanjiNBest.get(pronunciation);
+        LinkedHashMap<String, List<Token>> furiganaNBest = multiNBest(furigana, 100);
+        for(Map.Entry<String, List<Token>> e : kanjiNBest.entrySet()) {
+            if(furiganaNBest.containsKey(e.getKey())) { // pronunciation matches furigana
+                return e.getValue();
+            }
         }
 
         // No common pronunciation.
