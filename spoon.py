@@ -37,10 +37,10 @@ from japanese_data import ReviewType
 DEFAULT_RETENTION = 0.95
 
 #: Strength which makes retention drop below DEFAULT RETENTION within a day.
-MEMORY_STRENGTH_PER_DAY = -1/math.log(DEFAULT_RETENTION)
+FORGETFULNESS = 0.02
 
 #: Time (in days) it takes to forget after seeing something once or relearning.
-BASELINE_MEMORY_STRENGTH = 20
+BASELINE_MEMORY_STRENGTH = 3
 
 #: Time (in days) after which "the test" for determining utility is taken.
 TEST_DELAY = 20
@@ -247,13 +247,13 @@ def get_scheduled_reviews(cursor, desired_retention):
                                             25
                                         ) * (
                                             exp(
-                                                -(julianday('now') - {table}.last_{kind}refresh)
+                                                {-FORGETFULNESS}*(julianday('now') - {table}.last_{kind}refresh)
                                                     /({BASELINE_MEMORY_STRENGTH} + {table}.last_{kind}refresh - {table}.last_{kind}relearn)
                                             )*(
                                                 (
-                                                    exp(-{TEST_DELAY}/({BASELINE_MEMORY_STRENGTH} +  julianday('now') - {table}.last_{kind}relearn))
-                                                    - exp(-{TEST_DELAY}/({BASELINE_MEMORY_STRENGTH} + {table}.last_{kind}refresh - {table}.last_{kind}relearn))
-                                                )/exp(-{TEST_DELAY}/{BASELINE_MEMORY_STRENGTH})
+                                                    exp(-{FORGETFULNESS*TEST_DELAY}/({BASELINE_MEMORY_STRENGTH} +  julianday('now') - {table}.last_{kind}relearn))
+                                                    - exp(-{FORGETFULNESS*TEST_DELAY}/({BASELINE_MEMORY_STRENGTH} + {table}.last_{kind}refresh - {table}.last_{kind}relearn))
+                                                )/exp(-{FORGETFULNESS*TEST_DELAY}/{BASELINE_MEMORY_STRENGTH})
                                                 - 1
                                             )
                                             + 1
@@ -755,7 +755,7 @@ def review(args):
                     for table, kind in review_type.tables_kinds
                     )})
                 ''',
-                dict(log_retention=MEMORY_STRENGTH_PER_DAY * math.log(args.desired_retention)*4))
+                dict(log_retention=-4*math.log(args.desired_retention)/math.log(DEFAULT_RETENTION)))
 
             next_review = str(datetime.timedelta(next_review)).split('.')[0]
 
