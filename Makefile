@@ -14,7 +14,7 @@
 #   You should have received a copy of the GNU Affero General Public License
 #   along with Alphabet Soup.  If not, see <https://www.gnu.org/licenses/>.
 
-.PHONY: all download-tatoeba download-librivox-index \
+.PHONY: all setup download-tatoeba download-librivox-index \
 	download-aozora-index download-kanjivg kanjivg-gifs
 
 TATOEBA_FILENAMES := sentences_detailed links tags sentences_with_audio user_languages transcriptions
@@ -22,7 +22,22 @@ TATOEBA_FILES := $(addprefix data/tatoeba/,$(TATOEBA_FILENAMES))
 TATOEBA_TARBALLS := $(addsuffix .tar.bz2,$(TATOEBA_FILES))
 TATOEBA_CSVS := $(addsuffix .csv,$(TATOEBA_FILES))
 
+VENV_PY := virtualenv/bin/python
+VENV_PIP := $(VENV_PY) -m pip
+
 all:
+
+$(VENV_PY):
+	python3 -m venv virtualenv
+	$(VENV_PIP) install wheel
+
+setup: $(VENV_PY)
+	$(VENV_PIP) install -r requirements.txt
+
+requirements.lock: requirements.txt $(VENV_PY)
+	echo > "$@" # empty constraints
+	$(VENV_PIP) install --upgrade -r "$<"
+	$(VENV_PIP) freeze > "$@"
 
 download-tatoeba:
 	wget --timestamping --directory-prefix=data/tatoeba/ \
@@ -36,10 +51,10 @@ data/tatoeba/%.csv: data/tatoeba/%.tar.bz2
 	tar --directory=data/tatoeba/ --extract --bzip2 --touch --file=$<
 
 data/tatoeba.sqlite: tatoeba_data.py $(TATOEBA_CSVS)
-	pipenv run ./tatoeba_data.py build-database --database=$@
+	$(VENV_PY) ./tatoeba_data.py build-database --database=$@
 
 data/tatoeba_sentences_%.csv: data/tatoeba.sqlite tatoeba_data.py
-	pipenv run ./tatoeba_data.py filter-language --database=$< \
+	$(VENV_PY) ./tatoeba_data.py filter-language --database=$< \
 		--language=$* --minimum-level=5 > $@
 
 data/librivox/:
@@ -51,11 +66,11 @@ download-librivox-index data/librivox/index.xml: data/librivox/
 		-O data/librivox/index.xml
 
 data/librivox/download_urls.csv: data/librivox/index.xml librivox_data.py
-	pipenv run ./librivox_data.py find-links --index=$< > $@
+	$(VENV_PY) ./librivox_data.py find-links --index=$< > $@
 
 data/librivox/audiobooks/: data/aozora/librivox_audiobooks.csv librivox_data.py
 	rm -r $@
-	pipenv run ./librivox_data.py download-audiobooks --file-list=$< \
+	$(VENV_PY) ./librivox_data.py download-audiobooks --file-list=$< \
 		--output-directory=$@
 	touch $@
 
@@ -71,10 +86,10 @@ data/aozora/list_person_%.csv: data/aozora/list_person_%.zip
 	unzip -DD $< -d data/aozora/
 
 data/aozora/modern_works.urls: aozora_data.py data/aozora/list_person_all_extended_utf8.csv
-	pipenv run ./aozora_data.py modern-works > $@
+	$(VENV_PY) ./aozora_data.py modern-works > $@
 
 data/aozora/librivox_audiobooks.csv: aozora_data.py data/aozora/list_person_all_extended_utf8.csv data/librivox/download_urls.csv
-	pipenv run ./aozora_data.py librivox-audiobooks \
+	$(VENV_PY) ./aozora_data.py librivox-audiobooks \
 		--librivox-links=data/librivox/download_urls.csv > $@
 
 data/aozora/files: data/aozora/modern_works.urls data/aozora/librivox_audiobooks.csv
@@ -84,7 +99,7 @@ data/aozora/files: data/aozora/modern_works.urls data/aozora/librivox_audiobooks
 	touch $@
 
 data/aozora_sentences.csv: aozora_data.py data/aozora/files
-	pipenv run ./aozora_data.py extract-sentences > $@
+	$(VENV_PY) ./aozora_data.py extract-sentences > $@
 
 data/japanese_sentences.csv: data/tatoeba_sentences_jpn-Hrkt.csv data/aozora_sentences.csv
 	cat $^ > $@
@@ -93,7 +108,7 @@ kuromoji/target/kuromoji-1.0-jar-with-dependencies.jar: kuromoji/src/main/java/c
 	cd kuromoji; mvn clean compile assembly:single
 
 data/new_japanese_sentences.sqlite: data/japanese_sentences.csv japanese_data.py kuromoji/target/kuromoji-1.0-jar-with-dependencies.jar
-	pipenv run ./japanese_data.py build-database --database=$@ --sentence-table=$<
+	$(VENV_PY) ./japanese_data.py build-database --database=$@ --sentence-table=$<
 
 data/kanjivg/kanjivg-20160426-main.zip:
 	wget --timestamping --directory-prefix=data/kanjivg/ \
@@ -103,17 +118,17 @@ data/kanjivg/kanji/%.svg: data/kanjivg/kanjivg-20160426-main.zip
 	unzip -DD $< -d data/kanjivg/
 
 data/kanjivg/kanji/%.gif: data/kanjivg/kanji/%.svg
-	pipenv run kanjivg-gif.py $<
+	$(VENV_PY) kanjivg-gif.py $<
 
 kanjivg-gifs: data/kanjivg/kanji/26951.svg # any would work here
-	pipenv run find data/kanjivg/kanji -name '*.svg' -exec kanjivg-gif.py '{}' '+'
+	$(VENV_PY) find data/kanjivg/kanji -name '*.svg' -exec kanjivg-gif.py '{}' '+'
 
 data/jmdict/JM%:
 	wget --timestamping --directory-prefix=data/jmdict/ \
 		ftp://ftp.monash.edu.au/pub/nihongo/`basename $@`
 
 data/japanese_dictionary.sqlite: data/japanese_sentences.sqlite data/jmdict/JMdict.gz data/jmdict/JMnedict.xml.gz jmdict_data.py
-	pipenv run ./jmdict_data.py convert \
+	$(VENV_PY) ./jmdict_data.py convert \
 		--jmdict=data/jmdict/JMdict.gz \
 		--jmnedict=data/jmdict/JMnedict.xml.gz \
 		--database=$@ --sentence-database=$<

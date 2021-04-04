@@ -15,10 +15,10 @@ You may be able to install it on another machine by following the steps below.
 
 ### Installation
 
-First, install the required Python dependencies with [pipenv](https://pipenv.kennethreitz.org/),
+First, install the required Python dependencies in a virtual environment
 by running
 ```bash
-pipenv install
+make setup
 ```
 
 To create the sentence database, run
@@ -48,7 +48,7 @@ make kanjivg-gifs
 
 To learn a new Japanese sentence with English or Mandarin Chinese translations, run
 ```bash
-pipenv run ./spoon.py recommend-sentence --translation-languages eng cmn
+virtualenv/bin/python ./spoon.py recommend-sentence --translation-languages eng cmn
 ```
 This will take a few minutes for the first few runs because the most common
 words appear in almost every sentence.
@@ -63,7 +63,7 @@ the command.
 
 To practice what you learned, run
 ```bash
-pipenv run ./spoon.py review --translation-languages eng cmn
+virtualenv/bin/python ./spoon.py review --translation-languages eng cmn
 ```
 There are two kinds of review. The first is dictation, where you listen to the
 recording and should try to write down what you hear on paper. The second is
