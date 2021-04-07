@@ -26,6 +26,10 @@ import subprocess
 import sys
 
 
+JULIANDAY_OFFSET = 2451542
+JULIANDAY_RELATIVE = f"(julianday('now') - {JULIANDAY_OFFSET})"
+
+
 class ReviewType(Enum):
     WRITING_TO_PRONUNCIATION = 0
     PRONUNCIATION_TO_WRITING = 1
@@ -342,8 +346,8 @@ def create_log_trigger(cursor, table, kinds):
                 VALUES (
                     "{table}_{kind}",
                     OLD.frequency,
-                    julianday("now") - OLD.last_{kind}refresh,
-                    julianday("now") - OLD.last_{kind}relearn,
+                    {JULIANDAY_RELATIVE} - OLD.last_{kind}refresh,
+                    {JULIANDAY_RELATIVE} - OLD.last_{kind}relearn,
                     (NEW.last_{kind}relearn == OLD.last_{kind}relearn));
             END
             ''')

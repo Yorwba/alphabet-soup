@@ -31,7 +31,7 @@ import PySide2.QtGui as qg
 import PySide2.QtMultimedia as qm
 import PySide2.QtWidgets as qw
 
-from japanese_data import ReviewType
+from japanese_data import ReviewType, JULIANDAY_RELATIVE
 
 #: Let's say forgetting 1 in 20 words is okay.
 DEFAULT_RETENTION = 0.95
@@ -58,8 +58,8 @@ def refresh(cursor, table, kinds, ids):
         UPDATE {table} SET
         {','.join(
             f"""
-            last_{kind}refresh = julianday("now"),
-            last_{kind}relearn = IFNULL(last_{kind}relearn, julianday("now"))
+            last_{kind}refresh = {JULIANDAY_RELATIVE},
+            last_{kind}relearn = IFNULL(last_{kind}relearn, {JULIANDAY_RELATIVE})
             """ for kind in kinds)}
         WHERE id = ?
         ''',
@@ -72,8 +72,8 @@ def relearn(cursor, table, kinds, ids):
         UPDATE {table} SET
         {','.join(
             f"""
-            last_{kind}refresh = julianday("now"),
-            last_{kind}relearn = julianday("now")
+            last_{kind}refresh = {JULIANDAY_RELATIVE},
+            last_{kind}relearn = {JULIANDAY_RELATIVE}
             """ for kind in kinds)}
         WHERE id = ?
         ''',
@@ -182,7 +182,7 @@ def get_sentence_details(cursor, id, only_new=True, translation_languages=['eng'
     cursor.execute(
         f'''
         UPDATE sentence
-        SET last_seen = julianday('now')
+        SET last_seen = {JULIANDAY_RELATIVE}
         WHERE id = ?
         ''',
         (id,))
@@ -247,11 +247,11 @@ def get_scheduled_reviews(cursor, desired_retention):
                                             25
                                         ) * (
                                             exp(
-                                                {-FORGETFULNESS}*(julianday('now') - {table}.last_{kind}refresh)
+                                                {-FORGETFULNESS}*({JULIANDAY_RELATIVE} - {table}.last_{kind}refresh)
                                                     /({BASELINE_MEMORY_STRENGTH} + {table}.last_{kind}refresh - {table}.last_{kind}relearn)
                                             )*(
                                                 (
-                                                    exp(-{FORGETFULNESS*TEST_DELAY}/({BASELINE_MEMORY_STRENGTH} +  julianday('now') - {table}.last_{kind}relearn))
+                                                    exp(-{FORGETFULNESS*TEST_DELAY}/({BASELINE_MEMORY_STRENGTH} +  {JULIANDAY_RELATIVE} - {table}.last_{kind}relearn))
                                                     - exp(-{FORGETFULNESS*TEST_DELAY}/({BASELINE_MEMORY_STRENGTH} + {table}.last_{kind}refresh - {table}.last_{kind}relearn))
                                                 )/exp(-{FORGETFULNESS*TEST_DELAY}/{BASELINE_MEMORY_STRENGTH})
                                                 - 1
@@ -261,7 +261,7 @@ def get_scheduled_reviews(cursor, desired_retention):
                                         AS utility
                                     FROM {table}, totals
                                     WHERE {table}.last_{kind}refresh IS NOT NULL
-                                    AND (julianday('now') - {table}.last_{kind}refresh)
+                                    AND ({JULIANDAY_RELATIVE} - {table}.last_{kind}refresh)
                                         >= {RELEARN_GRACE_PERIOD}
                         '''
                         for table, kind in review_type.tables_kinds
@@ -312,7 +312,7 @@ def get_scheduled_reviews(cursor, desired_retention):
                 AND sentence.minimum_unknown_frequency IS NULL
                 ORDER BY
                     ifnull(
-                        1. + 1./(julianday('now') - last_seen),
+                        1. + 1./({JULIANDAY_RELATIVE} - last_seen),
                         0.
                     ) + 1./7.*{UNIFORM_RANDOM}
                     ASC
@@ -743,7 +743,7 @@ def review(args):
         def refresh_dialog():
             (next_review,), = c.execute(
                 f'''
-                SELECT min(next_review) - julianday('now')
+                SELECT min(next_review) - {JULIANDAY_RELATIVE}
                 FROM ({' UNION '.join(
                     f"""
                         SELECT
