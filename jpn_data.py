@@ -660,9 +660,9 @@ def main(argv):
     parser = argparse.ArgumentParser(
         description='Japanese sentence database')
     parser.add_argument('command', nargs=1, choices={'build-database'})
-    parser.add_argument('--database', type=str, default='data/new_japanese_sentences.sqlite')
-    parser.add_argument('--old-database', type=str, default='data/japanese_sentences.sqlite')
-    parser.add_argument('--sentence-table', type=str, default='data/japanese_sentences.csv')
+    parser.add_argument('--database', type=str, default='data/new_jpn_sentences.sqlite')
+    parser.add_argument('--old-database', type=str, default='data/jpn_sentences.sqlite')
+    parser.add_argument('--sentence-table', type=str, default='data/jpn_sentences.csv')
     args = parser.parse_args(argv[1:])
 
     globals()[args.command[0].replace('-', '_')](args)

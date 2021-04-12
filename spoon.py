@@ -31,7 +31,7 @@ import PySide2.QtGui as qg
 import PySide2.QtMultimedia as qm
 import PySide2.QtWidgets as qw
 
-from japanese_data import ReviewType, JULIANDAY_RELATIVE
+from jpn_data import ReviewType, JULIANDAY_RELATIVE
 
 #: Let's say forgetting 1 in 20 words is okay.
 DEFAULT_RETENTION = 0.95
@@ -810,9 +810,9 @@ def main(argv):
     parser = argparse.ArgumentParser(
         description='Example sentence recommender')
     parser.add_argument('command', nargs=1, choices={'recommend-sentence', 'review'})
-    parser.add_argument('--database', type=str, default='data/japanese_sentences.sqlite')
+    parser.add_argument('--database', type=str, default='data/jpn_sentences.sqlite')
     parser.add_argument('--tatoeba-database', type=str, default='data/tatoeba.sqlite')
-    parser.add_argument('--dictionary-database', type=str, default='data/japanese_dictionary.sqlite')
+    parser.add_argument('--dictionary-database', type=str, default='data/jpn_dictionary.sqlite')
     parser.add_argument('--translation-languages', type=str, nargs='+', default=['eng'])
     parser.add_argument('--desired-retention', type=float, default=DEFAULT_RETENTION)
     parser.add_argument('--review-time-seconds', type=float, default=600.)

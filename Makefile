@@ -101,14 +101,14 @@ data/aozora/files: data/aozora/modern_works.urls data/aozora/librivox_audiobooks
 data/aozora_sentences.csv: aozora_data.py data/aozora/files
 	$(VENV_PY) ./aozora_data.py extract-sentences > $@
 
-data/japanese_sentences.csv: data/tatoeba_sentences_jpn-Hrkt.csv data/aozora_sentences.csv
+data/jpn_sentences.csv: data/tatoeba_sentences_jpn-Hrkt.csv data/aozora_sentences.csv
 	cat $^ > $@
 
 kuromoji/target/kuromoji-1.0-jar-with-dependencies.jar: kuromoji/src/main/java/com/yorwba/kuromoji/KuromojiTokenize.java kuromoji/pom.xml
 	cd kuromoji; mvn clean compile assembly:single
 
-data/new_japanese_sentences.sqlite: data/japanese_sentences.csv japanese_data.py kuromoji/target/kuromoji-1.0-jar-with-dependencies.jar
-	$(VENV_PY) ./japanese_data.py build-database --database=$@ --sentence-table=$<
+data/new_jpn_sentences.sqlite: data/jpn_sentences.csv jpn_data.py kuromoji/target/kuromoji-1.0-jar-with-dependencies.jar
+	$(VENV_PY) ./jpn_data.py build-database --database=$@ --sentence-table=$<
 
 data/kanjivg/kanjivg-20160426-main.zip:
 	wget --timestamping --directory-prefix=data/kanjivg/ \
@@ -127,7 +127,7 @@ data/jmdict/JM%:
 	wget --timestamping --directory-prefix=data/jmdict/ \
 		ftp://ftp.monash.edu.au/pub/nihongo/`basename $@`
 
-data/japanese_dictionary.sqlite: data/japanese_sentences.sqlite data/jmdict/JMdict.gz data/jmdict/JMnedict.xml.gz jmdict_data.py
+data/jpn_dictionary.sqlite: data/jpn_sentences.sqlite data/jmdict/JMdict.gz data/jmdict/JMnedict.xml.gz jmdict_data.py
 	$(VENV_PY) ./jmdict_data.py convert \
 		--jmdict=data/jmdict/JMdict.gz \
 		--jmnedict=data/jmdict/JMnedict.xml.gz \

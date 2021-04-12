@@ -23,7 +23,7 @@ make setup
 
 To create the sentence database, run
 ```bash
-make data/new_japanese_sentences.sqlite
+make data/new_jpn_sentences.sqlite
 ```
 This will take a few hours to download everything and process the data.
 If you get errors, those are probably due to missing non-Python dependencies.
@@ -31,12 +31,12 @@ Hopefully you can figure out how to install them.
 
 If the command executes successfully, move the resulting file to a new location.
 ```bash
-mv data/new_japanese_sentences.sqlite data/japanese_sentences.sqlite
+mv data/new_jpn_sentences.sqlite data/jpn_sentences.sqlite
 ```
 
 Then generate the dictionary
 ```bash
-make data/japanese_dictionary.sqlite
+make data/jpn_dictionary.sqlite
 ```
 
 And the animated stroke order diagrams for all kanji

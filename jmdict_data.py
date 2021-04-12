@@ -324,8 +324,8 @@ def main(argv):
     parser.add_argument('command', nargs=1, choices={'convert'})
     parser.add_argument('--jmdict', type=str, default='data/jmdict/JMdict.gz')
     parser.add_argument('--jmnedict', type=str, default='data/jmdict/JMnedict.xml.gz')
-    parser.add_argument('--database', type=str, default='data/japanese_dictionary.sqlite')
-    parser.add_argument('--sentence-database', type=str, default='data/japanese_sentences.sqlite')
+    parser.add_argument('--database', type=str, default='data/jpn_dictionary.sqlite')
+    parser.add_argument('--sentence-database', type=str, default='data/jpn_sentences.sqlite')
     args = parser.parse_args(argv[1:])
 
     globals()[args.command[0].replace('-', '_')](args)
