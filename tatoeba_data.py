@@ -25,12 +25,13 @@ def read_escaped_lines(filename):
         continued_line = ''
         for line in file:
             if line.endswith('\\\n'):
-                continued_line += line[:-2]+'\n'
-                continue
-            else:
-                continued_line += line[:-1]
-                yield continued_line
-                continued_line = ''
+                backslash_count = len(line) - len(line.rstrip('\n').rstrip('\\')) - 1
+                if backslash_count % 2:
+                    continued_line += line[:-2]+'\n'
+                    continue
+            continued_line += line[:-1]
+            yield continued_line
+            continued_line = ''
         if continued_line:
             yield continued_line
 
