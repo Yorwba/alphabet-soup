@@ -1,0 +1,8 @@
+--constraint requirements.lock
+ffmpeg-python
+-e git+https://github.com/Yorwba/kanjivg-gif@c67a2434d32f3bfc1d5f4bf81b8d49a483732531#egg=kanjivg-gif
+lxml
+numpy
+PySide2
+requests
+scipy
