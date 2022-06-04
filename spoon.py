@@ -90,14 +90,14 @@ def get_audio(cursor, sentence, source_id):
             return path
 
     try:
-        (creator, license, attribution) = next(cursor.execute(
+        (audio_id, creator, license, attribution) = next(cursor.execute(
             f'''
-            SELECT user, license, attribution
+            SELECT audio_id, user, license, attribution
             FROM sentences_with_audio
-            WHERE id = ?
+            WHERE sentence_id = ?
             ''',
             (source_id,)))
-        url = f'https://audio.tatoeba.org/sentences/jpn/{source_id}.mp3'
+        url = f'https://tatoeba.org/audio/download/{audio_id}'
         file_path = f'data/audio/{filename}.mp3'
         import urllib.request
         urllib.request.urlretrieve(url, file_path)

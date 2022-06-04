@@ -148,12 +148,13 @@ def read_sentences_with_audio():
     c.execute(
         '''
         CREATE TABLE IF NOT EXISTS sentences_with_audio (
-            id integer PRIMARY KEY REFERENCES sentences_detailed(id),
+            sentence_id integer REFERENCES sentences_detailed(id),
+            audio_id integer PRIMARY KEY,
             user text REFERENCES sentences_detailed(user),
             license text,
             attribution text)
         ''')
-    c.executemany('INSERT OR REPLACE INTO sentences_with_audio VALUES (?,?,?,?)',
+    c.executemany('INSERT OR REPLACE INTO sentences_with_audio VALUES (?,?,?,?,?)',
                   read_tatoeba_tsv('data/tatoeba/sentences_with_audio.csv'))
     conn.commit()
 
