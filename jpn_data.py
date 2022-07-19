@@ -72,9 +72,8 @@ def create_link_table(cursor, table1, table2):
         ''')
 
 
-def create_tables():
-    c = conn.cursor()
-    c.execute(
+def create_tables(cursor):
+    cursor.execute(
         '''
         CREATE TABLE IF NOT EXISTS sentence (
             id integer PRIMARY KEY,
@@ -90,7 +89,7 @@ def create_tables():
             id_for_minimum_unknown_frequency integer,
             last_seen real)
         ''')
-    c.execute(
+    cursor.execute(
         '''
         CREATE TABLE IF NOT EXISTS lemma (
             id integer PRIMARY KEY,
@@ -101,8 +100,8 @@ def create_tables():
             frequency real,
             UNIQUE (text, disambiguator))
         ''')
-    create_link_table(c, 'sentence', 'lemma')
-    c.execute(
+    create_link_table(cursor, 'sentence', 'lemma')
+    cursor.execute(
         '''
         CREATE TABLE IF NOT EXISTS grammar (
             id integer PRIMARY KEY,
@@ -111,8 +110,8 @@ def create_tables():
             last_relearn real,
             frequency real)
         ''')
-    create_link_table(c, 'sentence', 'grammar')
-    c.execute(
+    create_link_table(cursor, 'sentence', 'grammar')
+    cursor.execute(
         '''
         CREATE TABLE IF NOT EXISTS grapheme (
             id integer PRIMARY KEY,
@@ -121,8 +120,8 @@ def create_tables():
             last_relearn real,
             frequency real)
         ''')
-    create_link_table(c, 'sentence', 'grapheme')
-    c.execute(
+    create_link_table(cursor, 'sentence', 'grapheme')
+    cursor.execute(
         '''
         CREATE TABLE IF NOT EXISTS pronunciation (
             id integer PRIMARY KEY,
@@ -135,8 +134,8 @@ def create_tables():
             frequency real,
             UNIQUE (word, pronunciation))
         ''')
-    create_link_table(c, 'sentence', 'pronunciation')
-    c.execute(
+    create_link_table(cursor, 'sentence', 'pronunciation')
+    cursor.execute(
         '''
         CREATE TABLE IF NOT EXISTS sound (
             id integer PRIMARY KEY,
@@ -145,8 +144,8 @@ def create_tables():
             last_relearn real,
             frequency real)
         ''')
-    create_link_table(c, 'sentence', 'sound')
-    c.execute(
+    create_link_table(cursor, 'sentence', 'sound')
+    cursor.execute(
         '''
         CREATE TABLE IF NOT EXISTS totals (
             id integer PRIMARY KEY CHECK (id = 0),
@@ -157,7 +156,7 @@ def create_tables():
             total_pronunciation_frequency real,
             total_sound_frequency real)
         ''')
-    c.execute(
+    cursor.execute(
         '''
         INSERT INTO  totals (
             id,
@@ -168,13 +167,13 @@ def create_tables():
             total_sound_frequency)
         VALUES (0, 0, 0, 0, 0, 0)
         ''')
-    c.execute(
+    cursor.execute(
         '''
         CREATE TABLE IF NOT EXISTS review (
             sentence_id integer REFERENCES sentence(id),
             type integer)
         ''')
-    c.execute(
+    cursor.execute(
         '''
         CREATE TABLE IF NOT EXISTS log (
             table_kind text,
@@ -520,7 +519,6 @@ def transfer_memory(cursor, old_database):
 
 
 def build_database(args):
-    global conn
     # First check for bugs
     if sqlite3.sqlite_version_info < (3, 30, 0):
         has_bug = sqlite3.sqlite_version_info <= (3, 27, 2)
@@ -540,8 +538,8 @@ def build_database(args):
             sys.exit(1)
 
     conn = sqlite3.connect(args.database)
-    create_tables()
-    c = conn.cursor()
+    cursor = conn.cursor()
+    create_tables(cursor)
     previous_sentence_id = None
     for (source_database, source_url, source_id, license_url, creator,
          sentence, segmented, pronounced, based, grammared
@@ -549,7 +547,7 @@ def build_database(args):
         unsegmented_text = ''.join(segmented)
         joined_segmentation = '\t'.join(segmented)
         joined_pronunciation = '\t'.join(pronounced)
-        c.execute(
+        cursor.execute(
             '''
             INSERT OR IGNORE INTO sentence (
                 text, segmented_text, pronunciation, source_database, source_url,
@@ -557,38 +555,39 @@ def build_database(args):
             ''',
             (unsegmented_text, joined_segmentation, joined_pronunciation,
              source_database, source_url, source_id, license_url, creator))
-        sentence_id = [next(c.execute('SELECT last_insert_rowid() FROM sentence'))]
+        sentence_id = [next(cursor.execute('SELECT last_insert_rowid() FROM sentence'))]
         if sentence_id == previous_sentence_id:
             continue
         previous_sentence_id = sentence_id
         count_or_create_and_link(
-            c,
+            cursor,
             'sentence', 'lemma',
             ('id',), ('text', 'disambiguator'),
             sentence_id, based)
         count_or_create_and_link(
-            c,
+            cursor,
             'sentence', 'grammar',
             ('id',), ('form',),
             sentence_id, [(g,) for g in grammared])
         count_or_create_and_link(
-            c,
+            cursor,
             'sentence', 'grapheme',
             ('id',), ('text',),
             sentence_id, [(w,) for w in sentence])
         count_or_create_and_link(
-            c, 'sentence', 'pronunciation',
+            cursor,
+            'sentence', 'pronunciation',
             ('id',), ('word', 'pronunciation'),
             sentence_id, list(zip(segmented, pronounced)))
         count_or_create_and_link(
-            c,
+            cursor,
             'sentence', 'sound',
             ('id',), ('text',),
             sentence_id, [(c,) for p in pronounced for c in p])
     tables = ('lemma', 'grammar', 'grapheme', 'pronunciation', 'sound')
     for table in tables:
-        update_total_frequency(c, table)
-    c.execute(
+        update_total_frequency(cursor, table)
+    cursor.execute(
         f'''
         UPDATE totals
         SET total_sentences = (SELECT count(*) FROM sentence)
@@ -596,9 +595,9 @@ def build_database(args):
         ''')
     kindses = (('',), ('',), ('',), ('forward_', 'backward_'), ('',))
     for table, kinds in zip(tables, kindses):
-        create_learn_trigger(c, table, kinds)
-        create_log_trigger(c, table, kinds)
-    c.execute(
+        create_learn_trigger(cursor, table, kinds)
+        create_log_trigger(cursor, table, kinds)
+    cursor.execute(
         f'''
         CREATE TRIGGER IF NOT EXISTS sentence_learned_trigger
         AFTER UPDATE OF minimum_unknown_frequency ON sentence
@@ -617,7 +616,7 @@ def build_database(args):
                 """ for review_type in ReviewType)};
         END
         ''')
-    c.execute(
+    cursor.execute(
         f'''
         CREATE TRIGGER IF NOT EXISTS sentence_unlearned_trigger
         AFTER UPDATE OF minimum_unknown_frequency ON sentence
@@ -629,7 +628,7 @@ def build_database(args):
             WHERE sentence_id = NEW.id;
         END
         ''')
-    c.execute(
+    cursor.execute(
         f'''
         UPDATE sentence SET
             (minimum_unknown_frequency, id_for_minimum_unknown_frequency) = (
@@ -652,7 +651,7 @@ def build_database(args):
                 LIMIT 1)
         ''')
     if args.old_database and os.path.isfile(args.old_database):
-        transfer_memory(c, args.old_database)
+        transfer_memory(cursor, args.old_database)
     conn.commit()
 
 
