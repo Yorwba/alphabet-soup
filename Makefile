@@ -29,7 +29,7 @@ all:
 
 $(VENV_PY):
 	python3 -m venv virtualenv
-	$(VENV_PIP) install wheel
+	$(VENV_PIP) install wheel pip==22.*
 
 setup: $(VENV_PY)
 	$(VENV_PIP) install -r requirements.txt
@@ -37,7 +37,7 @@ setup: $(VENV_PY)
 requirements.lock: requirements.txt $(VENV_PY)
 	echo > "$@" # empty constraints
 	$(VENV_PIP) install --upgrade -r "$<"
-	$(VENV_PIP) freeze > "$@"
+	$(VENV_PIP) freeze | grep -F '==' | grep -ve '^#' > "$@"
 
 download-tatoeba:
 	wget --timestamping --directory-prefix=data/tatoeba/ \

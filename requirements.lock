@@ -1,15 +1,14 @@
-certifi==2021.5.30
-charset-normalizer==2.0.4
+certifi==2022.9.24
+charset-normalizer==2.1.1
 ffmpeg-python==0.2.0
 future==0.18.2
-idna==3.2
--e git+https://github.com/Yorwba/kanjivg-gif@c67a2434d32f3bfc1d5f4bf81b8d49a483732531#egg=kanjivg_gif
-lxml==4.6.3
-numpy==1.21.2
-Pillow==8.3.1
-PySide2==5.15.2
-requests==2.26.0
-scipy==1.7.1
-shiboken2==5.15.2
-svg.path==4.1
-urllib3==1.26.6
+idna==3.4
+lxml==4.9.1
+numpy==1.23.4
+Pillow==9.3.0
+PySide2==5.15.2.1
+requests==2.28.1
+scipy==1.9.3
+shiboken2==5.15.2.1
+svg.path==6.2
+urllib3==1.26.12
