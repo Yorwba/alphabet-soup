@@ -154,6 +154,10 @@ def read_sentences_with_audio():
             license text,
             attribution text)
         ''')
+    c.execute(
+        '''
+        CREATE INDEX idx_sentences_with_audio_sentence ON sentences_with_audio(sentence_id)
+        ''')
     c.executemany('INSERT OR REPLACE INTO sentences_with_audio VALUES (?,?,?,?,?)',
                   read_tatoeba_tsv('data/tatoeba/sentences_with_audio.csv'))
     conn.commit()
