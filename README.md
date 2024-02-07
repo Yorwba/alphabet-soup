@@ -20,6 +20,13 @@ by running
 ```bash
 make setup
 ```
+If this step fails due to dependency conflicts, you can try regenerating
+the lock file:
+```bash
+rm -rf virtualenv/
+touch requirements.txt
+make requirements.lock
+```
 
 To create the sentence database, run
 ```bash

@@ -29,7 +29,7 @@ all:
 
 $(VENV_PY):
 	python3 -m venv virtualenv
-	$(VENV_PIP) install wheel pip==22.*
+	$(VENV_PIP) install wheel pip==24.*
 
 setup: $(VENV_PY)
 	$(VENV_PIP) install -r requirements.txt
